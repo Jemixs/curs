@@ -1,0 +1,207 @@
+@inject IClientProfileService ClientService
+@inject ISubscriptionService SubscriptionService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.AssignmentInd" Class="mr-2" />
+            Картка клієнта
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_isLoading)
+        {
+            <div class="d-flex justify-center py-4">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else if (_client is not null)
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Повне ім'я</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@_client.FullName</MudText>
+
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Телефон</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@_client.Phone</MudText>
+
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Email</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@_client.Email</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Баркод</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Dark" Class="mb-3">@_client.Barcode</MudChip>
+
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Статус</MudText>
+                    @if (_client.IsBlocked)
+                    { <MudChip T="string" Size="Size.Small" Color="Color.Error" Class="mb-3">Заблоковано</MudChip> }
+                    else
+                    { <MudChip T="string" Size="Size.Small" Color="Color.Success" Class="mb-3">Активний</MudChip> }
+
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Дата народження</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@_client.DateOfBirth.ToString("dd.MM.yyyy")</MudText>
+                </MudItem>
+            </MudGrid>
+
+            @if (!string.IsNullOrWhiteSpace(_client.Notes))
+            {
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Примітки</MudText>
+                <MudText Typo="Typo.body2" Class="mb-4">@_client.Notes</MudText>
+            }
+
+            <MudDivider Class="my-4" />
+
+            <div class="d-flex justify-space-between align-center mb-3">
+                <MudText Typo="Typo.h6">Абонементи</MudText>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           OnClick="SellSubscription">
+                    Продати тариф
+                </MudButton>
+            </div>
+
+            @if (_client.Subscriptions.Count == 0)
+            {
+                <MudText Color="Color.Secondary" Typo="Typo.body2">У клієнта немає абонементів.</MudText>
+            }
+            else
+            {
+                <MudList T="string" Dense="true" Class="mud-elevation-1 rounded">
+                    @foreach (var sub in _client.Subscriptions)
+                    {
+                        <MudListItem T="string">
+                            <div class="d-flex justify-space-between align-center">
+                                <div>
+                                    <MudText Typo="Typo.body1" Style="font-weight:600;">@sub.Plan.Name</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Придбано: @sub.PurchaseDate.ToLocalTime().ToString("dd.MM.yyyy")
+                                        @if (sub.ActivationDate.HasValue)
+                                        {
+                                            <span> | Активовано: @sub.ActivationDate.Value.ToLocalTime().ToString("dd.MM.yyyy")</span>
+                                        }
+                                        else
+                                        {
+                                            <span style="color:#F59E0B"> | Не активовано</span>
+                                        }
+                                    </MudText>
+                                    
+                                    @if (sub.Plan.PlanType == PlanType.LimitedVisits)
+                                    {
+                                        <div class="mt-1">
+                                            <MudProgressLinear Color="Color.Primary" Size="Size.Small" 
+                                                               Value="@sub.VisitsUsed" Max="@(sub.Plan.MaxVisits ?? 1)" />
+                                            <MudText Typo="Typo.caption">
+                                                Використано @sub.VisitsUsed з @sub.Plan.MaxVisits занять
+                                            </MudText>
+                                        </div>
+                                    }
+                                </div>
+                                <div class="d-flex flex-column align-end">
+                                    @if (sub.IsActive)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Success">Активний</MudChip>
+                                    }
+                                    else if (sub.IsFrozen)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">Заморожено</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Неактивний</MudChip>
+                                    }
+
+                                    <div class="d-flex mt-2">
+                                        @if (sub.IsFrozen)
+                                        {
+                                            <MudTooltip Text="Розморозити">
+                                                <MudIconButton Icon="@Icons.Material.Filled.AcUnit" Color="Color.Warning" Size="Size.Small"
+                                                               OnClick="@(() => Unfreeze(sub.Id))" />
+                                            </MudTooltip>
+                                        }
+                                        else if (sub.IsActive && sub.ActivationDate.HasValue)
+                                        {
+                                            <MudTooltip Text="Заморозити">
+                                                <MudIconButton Icon="@Icons.Material.Filled.AcUnit" Color="Color.Info" Size="Size.Small"
+                                                               OnClick="@(() => Freeze(sub.Id))" />
+                                            </MudTooltip>
+                                        }
+                                        
+                                        <MudTooltip Text="Скасувати/Видалити">
+                                            <MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small"
+                                                           OnClick="@(() => CancelSubscription(sub.Id))" />
+                                        </MudTooltip>
+                                    </div>
+                                </div>
+                            </div>
+                        </MudListItem>
+                        <MudDivider />
+                    }
+                </MudList>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Color="Color.Primary">Закрити</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int ClientId { get; set; }
+
+    private ClientDetailDto? _client;
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        var result = await ClientService.GetByIdAsync(ClientId);
+        if (result.IsSuccess)
+            _client = result.Value;
+        _isLoading = false;
+    }
+
+    private async Task Freeze(int subId)
+    {
+        var result = await SubscriptionService.FreezeAsync(subId);
+        Snackbar.Add(result.IsSuccess ? "Абонемент заморожено" : result.FirstError, 
+            result.IsSuccess ? Severity.Success : Severity.Error);
+        if (result.IsSuccess) await LoadData();
+    }
+
+    private async Task Unfreeze(int subId)
+    {
+        var result = await SubscriptionService.UnfreezeAsync(subId);
+        Snackbar.Add(result.IsSuccess ? "Абонемент розморожено" : result.FirstError, 
+            result.IsSuccess ? Severity.Success : Severity.Error);
+        if (result.IsSuccess) await LoadData();
+    }
+
+    private async Task CancelSubscription(int subId)
+    {
+        var confirmed = await DialogService.ShowMessageBox("Підтвердження", "Скасувати абонемент?", yesText: "Так", cancelText: "Ні");
+        if (confirmed == true)
+        {
+            var result = await SubscriptionService.CancelAsync(subId);
+            Snackbar.Add(result.IsSuccess ? "Абонемент скасовано" : result.FirstError, 
+                result.IsSuccess ? Severity.Success : Severity.Error);
+            if (result.IsSuccess) await LoadData();
+        }
+    }
+
+    private async Task SellSubscription()
+    {
+        var parameters = new DialogParameters<SellSubscriptionDialog> { { x => x.ClientId, ClientId } };
+        var dialog = await DialogService.ShowAsync<SellSubscriptionDialog>("Продаж тарифу", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadData();
+    }
+
+    private void Close() => MudDialog.Close(DialogResult.Ok(true));
+}

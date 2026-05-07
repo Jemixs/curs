@@ -1,0 +1,138 @@
+@page "/client"
+@layout Layout.ClientLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Client")]
+
+@using QRCoder
+@inject IAuthService AuthService
+@inject IClientProfileService ClientService
+@inject ISubscriptionService SubscriptionService
+
+<PageTitle>Головна — SportClub</PageTitle>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+}
+else if (_client is not null)
+{
+    <MudText Typo="Typo.h5" Style="font-weight:700;" Class="mb-1">Привіт, @_client.FullName.Split(' ')[0]!</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">Ваш цифровий доступ до клубу</MudText>
+
+    @if (_client.IsBlocked)
+    {
+        <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-4 rounded-lg">
+            Ваш профіль заблоковано. Будь ласка, зверніться до адміністратора.
+        </MudAlert>
+    }
+    else
+    {
+        <div class="qr-container mb-6">
+            <div class="qr-wrapper" style="background:#FFF; padding:20px; border-radius:24px; box-shadow:0 10px 40px rgba(108,99,255,0.15); display:flex; flex-direction:column; align-items:center;">
+                @if (!string.IsNullOrEmpty(_qrCodeBase64))
+                {
+                    <img src="data:image/png;base64,@_qrCodeBase64" alt="QR Code" style="width:200px; height:200px;" />
+                }
+                <MudChip T="string" Color="Color.Primary" Variant="Variant.Text" Class="mt-3 font-weight-bold" Style="font-size:1.1rem; letter-spacing:2px;">
+                    @_client.Barcode
+                </MudChip>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">Покажіть цей код на рецепції</MudText>
+            </div>
+        </div>
+
+        <MudText Typo="Typo.h6" Style="font-weight:700;" Class="mb-3">Поточний абонемент</MudText>
+
+        @if (_activeSubscription is null)
+        {
+            <MudCard Elevation="0" Style="border-radius:16px; border:1px dashed #D1D5DB; background:transparent;">
+                <MudCardContent Class="text-center pa-6">
+                    <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:600;">Немає активного абонемента</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-1">
+                        Придбайте новий тариф на рецепції клубу, щоб продовжити тренування.
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        }
+        else
+        {
+            <MudCard Elevation="2" Style="border-radius:16px; background:linear-gradient(135deg, #6C63FF, #4FACFE); color:white;">
+                <MudCardContent>
+                    <div class="d-flex justify-space-between align-center mb-4">
+                        <MudText Typo="Typo.h6" Style="font-weight:700;">@_activeSubscription.Plan.Name</MudText>
+                        <MudIcon Icon="@Icons.Material.Filled.CreditCard" />
+                    </div>
+
+                    @if (_activeSubscription.ActivationDate is null)
+                    {
+                        <MudChip T="string" Size="Size.Small" Style="background:rgba(255,255,255,0.2); color:white;" Class="mb-3">Не активовано</MudChip>
+                        <MudText Typo="Typo.body2" Style="opacity:0.9;">
+                            Абонемент автоматично активується під час вашого першого візиту.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <div class="mb-4">
+                            <MudText Typo="Typo.caption" Style="opacity:0.8; text-transform:uppercase; letter-spacing:1px;">Дійсний до</MudText>
+                            <MudText Typo="Typo.h5" Style="font-weight:600;">
+                                @_activeSubscription.ExpirationDate?.ToLocalTime().ToString("dd.MM.yyyy")
+                            </MudText>
+                        </div>
+
+                        @if (_activeSubscription.Plan.PlanType == PlanType.LimitedVisits)
+                        {
+                            <div class="mt-4">
+                                <div class="d-flex justify-space-between mb-1">
+                                    <MudText Typo="Typo.caption" Style="opacity:0.9;">Використано: @_activeSubscription.VisitsUsed</MudText>
+                                    <MudText Typo="Typo.caption" Style="opacity:0.9;">Всього: @_activeSubscription.Plan.MaxVisits</MudText>
+                                </div>
+                                <MudProgressLinear Color="Color.Surface" Size="Size.Medium" 
+                                                   Value="@_activeSubscription.VisitsUsed" Max="@(_activeSubscription.Plan.MaxVisits ?? 1)" 
+                                                   Style="border-radius:4px; opacity:0.9;" />
+                            </div>
+                        }
+                    }
+                </MudCardContent>
+            </MudCard>
+        }
+    }
+}
+
+@code {
+    private ClientDetailDto? _client;
+    private SubscriptionDto? _activeSubscription;
+    private bool _isLoading = true;
+    private string _qrCodeBase64 = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authRes = await AuthService.GetCurrentUserAsync();
+        if (authRes.IsSuccess)
+        {
+            var userId = authRes.Value!.UserId;
+            var clientRes = await ClientService.GetByUserIdAsync(userId);
+            
+            if (clientRes.IsSuccess)
+            {
+                _client = clientRes.Value;
+                GenerateQR(_client!.Barcode);
+
+                var subRes = await SubscriptionService.GetActiveAsync(_client.Id);
+                if (subRes.IsSuccess)
+                {
+                    _activeSubscription = subRes.Value;
+                }
+            }
+        }
+        _isLoading = false;
+    }
+
+    private void GenerateQR(string barcode)
+    {
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrCodeData = qrGenerator.CreateQrCode(barcode, QRCodeGenerator.ECCLevel.Q);
+        using var qrCode = new PngByteQRCode(qrCodeData);
+        var qrCodeImage = qrCode.GetGraphic(20, new byte[] { 108, 99, 255, 255 }, new byte[] { 255, 255, 255, 0 });
+        _qrCodeBase64 = Convert.ToBase64String(qrCodeImage);
+    }
+}

@@ -1,0 +1,84 @@
+@using SportClub.Components.Pages.Admin
+@inject IClientProfileService ClientService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Class="mr-2" />
+            Новий клієнт
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_valid">
+            <MudTextField @bind-Value="_model.FullName" Label="Повне ім'я" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Вкажіть ім'я" Class="mb-3" />
+            <MudTextField @bind-Value="_model.Email" Label="Email" Variant="Variant.Outlined"
+                          InputType="InputType.Email" Required="true" RequiredError="Вкажіть email" Class="mb-3" />
+            <MudTextField @bind-Value="_model.Password" Label="Пароль" Variant="Variant.Outlined"
+                          InputType="InputType.Password" Required="true" RequiredError="Вкажіть пароль" Class="mb-3" />
+            <MudTextField @bind-Value="_model.Phone" Label="Телефон" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Вкажіть телефон" Class="mb-3" />
+            <MudDatePicker @bind-Date="_dateOfBirth" Label="Дата народження" Variant="Variant.Outlined"
+                           Class="mb-3" DateFormat="dd.MM.yyyy" />
+            <MudTextField @bind-Value="_model.Notes" Label="Примітки" Variant="Variant.Outlined"
+                          Lines="2" Class="mb-2" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Скасувати</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="_saving" OnClick="Submit">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Зберегти
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+
+    private MudForm _form = null!;
+    private bool _valid;
+    private bool _saving;
+    private DateTime? _dateOfBirth = new DateTime(1990, 1, 1);
+
+    private AddClientModel _model = new();
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_valid) return;
+
+        _saving = true;
+
+        var dto = new RegisterClientDto(
+            _model.Email, _model.Password, _model.FullName,
+            _model.Phone, _dateOfBirth ?? DateTime.UtcNow, _model.Notes);
+
+        var result = await ClientService.CreateAsync(dto);
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Клієнта успішно додано!", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.FirstError, Severity.Error);
+        }
+
+        _saving = false;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class AddClientModel
+    {
+        public string FullName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public string? Notes { get; set; }
+    }
+}

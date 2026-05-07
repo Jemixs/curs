@@ -1,0 +1,84 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<MudThemeProvider Theme="_theme" />
+<MudProviders />
+
+<MudLayout>
+    <MudAppBar Elevation="0" Dense="true" Style="background:linear-gradient(90deg,#6C63FF,#4FACFE);">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+        <MudText Typo="Typo.h6" Style="font-weight:700;letter-spacing:-0.3px;">
+            <MudIcon Icon="@Icons.Material.Filled.FitnessCenter" Style="vertical-align:middle;margin-right:6px;" />
+            SportClub
+        </MudText>
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudText Typo="Typo.body2" Class="mr-3" Style="opacity:0.85;">@context.User.Identity?.Name</MudText>
+            </Authorized>
+        </AuthorizeView>
+        <form method="post" action="/auth/logout" style="display:inline;">
+            <MudTooltip Text="Вийти">
+                <MudIconButton Icon="@Icons.Material.Filled.Logout" Color="Color.Inherit"
+                               ButtonType="ButtonType.Submit" />
+            </MudTooltip>
+        </form>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always"
+               Elevation="2" Variant="DrawerVariant.Responsive"
+               Style="background:#1E1B4B;" Class="admin-drawer">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.subtitle2" Style="color:rgba(255,255,255,0.5);font-size:0.7rem;letter-spacing:1.5px;text-transform:uppercase;">
+                Меню
+            </MudText>
+        </MudDrawerHeader>
+        <MudNavMenu>
+            <MudNavLink Href="/admin" Match="NavLinkMatch.All"
+                        Icon="@Icons.Material.Filled.QrCodeScanner"
+                        Style="color:rgba(255,255,255,0.87);">
+                Реєстрація входу
+            </MudNavLink>
+            <MudNavLink Href="/admin/clients"
+                        Icon="@Icons.Material.Filled.People"
+                        Style="color:rgba(255,255,255,0.87);">
+                Клієнти
+            </MudNavLink>
+            <MudNavLink Href="/admin/plans"
+                        Icon="@Icons.Material.Filled.CardMembership"
+                        Style="color:rgba(255,255,255,0.87);">
+                Тарифи
+            </MudNavLink>
+        </MudNavMenu>
+    </MudDrawer>
+
+    <MudMainContent Style="background:#F4F6FB;min-height:100vh;">
+        <div class="pa-6">
+            @Body
+        </div>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#6C63FF",
+            PrimaryDarken = "#5A52E0",
+            Secondary = "#FF6584",
+            Background = "#F4F6FB",
+            Surface = "#FFFFFF",
+            AppbarBackground = "#6C63FF",
+            DrawerBackground = "#1E1B4B",
+            DrawerText = "rgba(255,255,255,0.87)",
+            DrawerIcon = "rgba(255,255,255,0.70)",
+            TextPrimary = "#1E1B4B",
+            TextSecondary = "#6B7280"
+        }
+    };
+}

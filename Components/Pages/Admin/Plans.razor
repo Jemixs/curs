@@ -1,0 +1,144 @@
+@page "/admin/plans"
+@layout Layout.AdminLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Receptionist")]
+
+@inject IPlanService PlanService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Тарифи — SportClub</PageTitle>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+    <MudText Typo="Typo.h5" Style="font-weight:700;color:#1E1B4B;">
+        <MudIcon Icon="@Icons.Material.Filled.CardMembership" Class="mr-2" Style="vertical-align:middle;" />
+        Тарифні плани
+    </MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenAddDialog"
+               Style="border-radius:10px;">
+        Створити тариф
+    </MudButton>
+</div>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-4" />
+}
+else
+{
+    <MudGrid>
+        @foreach (var plan in _plans)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="3" Style="border-radius:16px; position:relative;" Class="@(plan.IsArchived ? "opacity-75" : "")">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6" Style="font-weight:600; color:#1E1B4B;">@plan.Name</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @(plan.PlanType == PlanType.Unlimited ? "Безлімітний" : $"Лімітований: {plan.MaxVisits} занять")
+                            </MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            @if (plan.IsArchived)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Dark">В архіві</MudChip>
+                            }
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudText Typo="Typo.h4" Color="Color.Primary" Style="font-weight:700;" Class="mb-4">
+                            @plan.Price.ToString("N0") <span style="font-size:1rem; font-weight:500; color:#6B7280;">грн</span>
+                        </MudText>
+                        
+                        <div class="d-flex align-center mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Color="Color.Secondary" Class="mr-2" />
+                            <MudText Typo="Typo.body2">
+                                Дійсний: @plan.DurationValue @(plan.DurationUnit == PlanDurationUnit.Days ? "днів" : "місяців")
+                            </MudText>
+                        </div>
+                        
+                        @if (!string.IsNullOrEmpty(plan.Description))
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-3">
+                                @plan.Description
+                            </MudText>
+                        }
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit" 
+                                   OnClick="@(() => OpenEditDialog(plan))">Редагувати</MudButton>
+                        <MudSpacer />
+                        @if (plan.IsArchived)
+                        {
+                            <MudTooltip Text="Відновити">
+                                <MudIconButton Icon="@Icons.Material.Filled.Restore" Color="Color.Success" 
+                                               OnClick="@(() => RestorePlan(plan.Id))" />
+                            </MudTooltip>
+                        }
+                        else
+                        {
+                            <MudTooltip Text="Архівувати">
+                                <MudIconButton Icon="@Icons.Material.Filled.Archive" Color="Color.Warning" 
+                                               OnClick="@(() => ArchivePlan(plan.Id))" />
+                            </MudTooltip>
+                        }
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private List<PlanDto> _plans = new();
+    private bool _isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPlans();
+    }
+
+    private async Task LoadPlans()
+    {
+        _isLoading = true;
+        var result = await PlanService.GetAllAsync();
+        if (result.IsSuccess)
+            _plans = result.Value!.ToList();
+        _isLoading = false;
+    }
+
+    private async Task OpenAddDialog()
+    {
+        var dialog = await DialogService.ShowAsync<Dialogs.PlanDialog>("Новий тариф");
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadPlans();
+    }
+
+    private async Task OpenEditDialog(PlanDto plan)
+    {
+        var parameters = new DialogParameters<Dialogs.PlanDialog> { { x => x.Plan, plan } };
+        var dialog = await DialogService.ShowAsync<Dialogs.PlanDialog>("Редагування тарифу", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await LoadPlans();
+    }
+
+    private async Task ArchivePlan(int id)
+    {
+        var confirmed = await DialogService.ShowMessageBox("Архівувати?", "Тариф більше не буде доступний для продажу.", yesText: "Так", cancelText: "Ні");
+        if (confirmed == true)
+        {
+            var res = await PlanService.ArchiveAsync(id);
+            if (res.IsSuccess) await LoadPlans();
+            else Snackbar.Add(res.FirstError, Severity.Error);
+        }
+    }
+
+    private async Task RestorePlan(int id)
+    {
+        var res = await PlanService.RestoreAsync(id);
+        if (res.IsSuccess) await LoadPlans();
+        else Snackbar.Add(res.FirstError, Severity.Error);
+    }
+}

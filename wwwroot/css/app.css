@@ -1,0 +1,204 @@
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter', sans-serif;
+    background: #F4F6FB;
+    min-height: 100vh;
+}
+
+/* ── Login page ─────────────────────────────────────────── */
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #6C63FF 0%, #4FACFE 100%);
+    padding: 1rem;
+}
+
+.login-card {
+    background: #fff;
+    border-radius: 24px;
+    padding: 2.5rem 2rem;
+    width: 100%;
+    max-width: 420px;
+    box-shadow: 0 20px 60px rgba(108, 99, 255, 0.25);
+    animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.login-logo {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.login-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1E1B4B;
+    margin: 0.5rem 0 0;
+    letter-spacing: -0.5px;
+}
+
+.login-subtitle {
+    color: #6B7280;
+    margin: 0.25rem 0 0;
+    font-size: 0.875rem;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.login-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 1.25rem;
+}
+
+.login-label {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #374151;
+}
+
+.login-input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 1.5px solid #E5E7EB;
+    border-radius: 10px;
+    font-size: 0.9375rem;
+    font-family: 'Inter', sans-serif;
+    color: #1E1B4B;
+    background: #F9FAFB;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.login-input:focus {
+    border-color: #6C63FF;
+    box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
+    background: #fff;
+}
+
+.login-btn {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #6C63FF, #4FACFE);
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 4px 15px rgba(108, 99, 255, 0.4);
+    letter-spacing: 0.3px;
+    margin-top: 0.5rem;
+}
+
+.login-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(108, 99, 255, 0.5);
+}
+
+.login-btn:active {
+    transform: translateY(0);
+}
+
+.login-error {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+    color: #DC2626;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 0.875rem;
+    margin-bottom: 1.25rem;
+}
+
+.login-hint {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.78rem;
+    color: #9CA3AF;
+}
+
+.login-hint {
+    text-align: center;
+    margin-top: 1.5rem;
+}
+
+/* ── Admin layout ───────────────────────────────────────── */
+.admin-drawer .mud-nav-link {
+    border-radius: 10px;
+    margin: 2px 8px;
+    transition: background 0.2s;
+}
+
+.admin-drawer .mud-nav-link.active {
+    background: rgba(108, 99, 255, 0.15) !important;
+    color: #6C63FF !important;
+}
+
+/* ── Client layout ──────────────────────────────────────── */
+.client-page {
+    max-width: 430px;
+    margin: 0 auto;
+    padding-bottom: 80px;
+}
+
+/* ── Stat cards ─────────────────────────────────────────── */
+.stat-card {
+    border-radius: 16px !important;
+    background: linear-gradient(135deg, #6C63FF, #4FACFE) !important;
+    color: #fff !important;
+}
+
+/* ── QR container ───────────────────────────────────────── */
+.qr-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.5rem;
+}
+
+.qr-wrapper {
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 8px 30px rgba(108,99,255,0.2);
+    padding: 1rem;
+    background: #fff;
+}
+
+/* ── Check-in result card ───────────────────────────────── */
+.checkin-result {
+    border-radius: 16px !important;
+    animation: pulse 0.4s ease;
+}
+
+@keyframes pulse {
+    0%   { transform: scale(0.96); opacity: 0; }
+    100% { transform: scale(1);    opacity: 1; }
+}
+
+/* ── Data grid ──────────────────────────────────────────── */
+.mud-table-root {
+    border-radius: 12px !important;
+    overflow: hidden;
+}

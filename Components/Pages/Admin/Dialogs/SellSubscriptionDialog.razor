@@ -1,0 +1,94 @@
+@inject IPlanService PlanService
+@inject ISubscriptionService SubscriptionService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.ShoppingCart" Class="mr-2" />
+            Продаж тарифу
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_isLoading)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (_plans.Count == 0)
+        {
+            <MudText Color="Color.Error">Немає доступних тарифів.</MudText>
+        }
+        else
+        {
+            <MudSelect T="int" Label="Оберіть тариф" @bind-Value="_selectedPlanId" Variant="Variant.Outlined" Class="mb-4">
+                @foreach (var p in _plans)
+                {
+                    <MudSelectItem Value="@p.Id">@p.Name — @p.Price грн</MudSelectItem>
+                }
+            </MudSelect>
+
+            @if (_selectedPlanId > 0)
+            {
+                var p = _plans.First(x => x.Id == _selectedPlanId);
+                <MudCard Elevation="0" Style="background:#f4f6fb; padding:10px; border-radius:8px;">
+                    <MudText Typo="Typo.body2"><b>Тривалість:</b> @p.DurationValue @(p.DurationUnit == PlanDurationUnit.Days ? "днів" : "місяців")</MudText>
+                    <MudText Typo="Typo.body2">
+                        <b>Тип:</b> 
+                        @(p.PlanType == PlanType.Unlimited ? "Безліміт" : $"Ліміт ({p.MaxVisits} занять)")
+                    </MudText>
+                    @if (!string.IsNullOrEmpty(p.Description))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1">@p.Description</MudText>
+                    }
+                </MudCard>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Скасувати</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="@(_selectedPlanId == 0 || _saving)" OnClick="Submit">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Продати
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int ClientId { get; set; }
+
+    private List<PlanDto> _plans = new();
+    private int _selectedPlanId;
+    private bool _isLoading = true;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var res = await PlanService.GetAllAsync();
+        if (res.IsSuccess)
+        {
+            _plans = res.Value!.Where(p => !p.IsArchived).ToList();
+        }
+        _isLoading = false;
+    }
+
+    private async Task Submit()
+    {
+        _saving = true;
+        var dto = new SellSubscriptionDto(ClientId, _selectedPlanId);
+        var result = await SubscriptionService.SellAsync(dto);
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Тариф успішно продано!", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.FirstError, Severity.Error);
+        }
+        _saving = false;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

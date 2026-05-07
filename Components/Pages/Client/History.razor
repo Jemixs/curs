@@ -1,0 +1,112 @@
+@page "/client/history"
+@layout Layout.ClientLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Client")]
+
+@inject IAuthService AuthService
+@inject IClientProfileService ClientProfileService
+@inject ICheckInService CheckInService
+
+<PageTitle>Історія візитів — SportClub</PageTitle>
+
+<MudText Typo="Typo.h5" Style="font-weight:700;" Class="mb-6">Історія візитів</MudText>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+}
+else if (_client is null)
+{
+    <MudText Color="Color.Error">Помилка завантаження профілю.</MudText>
+}
+else if (_history.Count == 0)
+{
+    <div style="text-align:center; padding:40px 20px;">
+        <MudIcon Icon="@Icons.Material.Filled.HistoryToggleOff" Style="font-size:4rem; color:#E5E7EB; margin-bottom:16px;" />
+        <MudText Typo="Typo.h6" Style="color:#9CA3AF; font-weight:600;">Історія порожня</MudText>
+        <MudText Typo="Typo.body2" Style="color:#9CA3AF; margin-top:8px;">Ви ще не відвідували клуб. Ваш перший візит з'явиться тут.</MudText>
+    </div>
+}
+else
+{
+    <div class="history-timeline">
+        @foreach (var visit in _history)
+        {
+            <MudCard Elevation="1" Style="border-radius:16px; margin-bottom:12px; border:1px solid #F3F4F6;">
+                <MudCardContent Style="padding:16px;">
+                    <div class="d-flex align-center">
+                        <div style="background:rgba(108,99,255,0.1); border-radius:12px; width:48px; height:48px; display:flex; align-items:center; justify-content:center; margin-right:16px;">
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" />
+                        </div>
+                        <div style="flex:1;">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:700; color:#1E1B4B;">Візит до клубу</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">@visit.PlanName</MudText>
+                        </div>
+                        <div style="text-align:right;">
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:700;">@visit.CheckedInAt.ToLocalTime().ToString("HH:mm")</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@visit.CheckedInAt.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+                        </div>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        }
+    </div>
+
+    @if (_hasNextPage)
+    {
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" Class="mt-4" Style="border-radius:12px; border-width:2px;" OnClick="LoadMore" Disabled="_isLoadingMore">
+            @if (_isLoadingMore)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Завантажити ще
+        </MudButton>
+    }
+}
+
+@code {
+    private bool _isLoading = true;
+    private bool _isLoadingMore = false;
+    private ClientDetailDto? _client;
+    private List<CheckInHistoryItemDto> _history = new();
+    private int _currentPage = 1;
+    private bool _hasNextPage = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authRes = await AuthService.GetCurrentUserAsync();
+        if (authRes.IsSuccess)
+        {
+            var userId = authRes.Value!.UserId;
+            var clientRes = await ClientProfileService.GetByUserIdAsync(userId);
+            
+            if (clientRes.IsSuccess)
+            {
+                _client = clientRes.Value;
+                await LoadHistoryPage(1);
+            }
+        }
+        _isLoading = false;
+    }
+
+    private async Task LoadMore()
+    {
+        if (_client is null) return;
+        
+        _isLoadingMore = true;
+        await LoadHistoryPage(_currentPage + 1);
+        _isLoadingMore = false;
+    }
+
+    private async Task LoadHistoryPage(int page)
+    {
+        var result = await CheckInService.GetHistoryAsync(_client!.Id, page, 10);
+        if (result.IsSuccess)
+        {
+            if (page == 1) _history.Clear();
+            _history.AddRange(result.Value!.Items);
+            _currentPage = result.Value.Page;
+            _hasNextPage = result.Value.HasNextPage;
+        }
+    }
+}

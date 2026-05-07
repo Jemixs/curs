@@ -1,0 +1,87 @@
+@inject IClientProfileService ClientService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" />
+            Редагування клієнта
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_valid">
+            <MudTextField @bind-Value="_fullName" Label="Повне ім'я" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Вкажіть ім'я" Class="mb-3" />
+            <MudTextField @bind-Value="_email" Label="Email" Variant="Variant.Outlined"
+                          InputType="InputType.Email" Required="true" Class="mb-3" />
+            <MudTextField @bind-Value="_phone" Label="Телефон" Variant="Variant.Outlined"
+                          Required="true" Class="mb-3" />
+            <MudDatePicker @bind-Date="_dateOfBirth" Label="Дата народження" Variant="Variant.Outlined"
+                           Class="mb-3" DateFormat="dd.MM.yyyy" />
+            <MudTextField @bind-Value="_notes" Label="Примітки" Variant="Variant.Outlined"
+                          Lines="2" Class="mb-3" />
+            <MudCheckBox @bind-Value="_isBlocked" Label="Заблоковано" Color="Color.Error" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Скасувати</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   Disabled="_saving" OnClick="Submit">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Зберегти
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public ClientDetailDto Client { get; set; } = null!;
+
+    private MudForm _form = null!;
+    private bool _valid;
+    private bool _saving;
+
+    private string _fullName = string.Empty;
+    private string _email = string.Empty;
+    private string _phone = string.Empty;
+    private string? _notes;
+    private bool _isBlocked;
+    private DateTime? _dateOfBirth;
+
+    protected override void OnInitialized()
+    {
+        _fullName = Client.FullName;
+        _email = Client.Email;
+        _phone = Client.Phone;
+        _notes = Client.Notes;
+        _isBlocked = Client.IsBlocked;
+        _dateOfBirth = Client.DateOfBirth;
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_valid) return;
+
+        _saving = true;
+
+        var dto = new UpdateClientDto(Client.Id, _fullName, _email, _phone,
+            _dateOfBirth ?? DateTime.UtcNow, _notes, _isBlocked);
+
+        var result = await ClientService.UpdateAsync(dto);
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Дані клієнта оновлено!", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.FirstError, Severity.Error);
+        }
+
+        _saving = false;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

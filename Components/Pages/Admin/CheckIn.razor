@@ -1,0 +1,200 @@
+@page "/admin"
+@layout Layout.AdminLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Receptionist")]
+
+@inject ICheckInService CheckInService
+@inject IJSRuntime JS
+
+<PageTitle>Реєстрація входу — SportClub</PageTitle>
+
+<MudText Typo="Typo.h5" Class="mb-6" Style="font-weight:700;color:#1E1B4B;">
+    <MudIcon Icon="@Icons.Material.Filled.QrCodeScanner" Class="mr-2" Style="vertical-align:middle;" />
+    Реєстрація входу
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="5">
+        <MudCard Elevation="3" Style="border-radius:20px;">
+            <MudCardContent>
+                <MudText Typo="Typo.subtitle1" Class="mb-4" Style="font-weight:600;">Сканування баркоду</MudText>
+
+                <input id="barcode-input"
+                       type="text"
+                       style="position:absolute;opacity:0;width:1px;height:1px;"
+                       @bind="_barcode"
+                       @bind:event="oninput"
+                       @onkeydown="OnKeyDown" />
+
+                <div class="scanner-display @(_isScanning ? "scanner-active" : "")">
+                    <MudIcon Icon="@Icons.Material.Filled.QrCodeScanner"
+                             Style="font-size:3.5rem;color:#6C63FF;opacity:0.7;" />
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
+                        @if (_isScanning)
+                        { <span>Сканування...</span> }
+                        else
+                        { <span>Відскануйте або введіть баркод</span> }
+                    </MudText>
+                    @if (!string.IsNullOrEmpty(_barcode))
+                    {
+                        <MudChip T="string" Color="Color.Primary" Class="mt-2">@_barcode</MudChip>
+                    }
+                </div>
+
+                <MudTextField @bind-Value="_barcode"
+                              Label="Баркод клієнта"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              OnAdornmentClick="ProcessManual"
+                              Class="mt-4"
+                              FullWidth="true" />
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           FullWidth="true" Class="mt-3"
+                           Disabled="_isLoading"
+                           OnClick="ProcessManual">
+                    @if (_isLoading)
+                    { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+                    Зареєструвати
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+
+        @if (_lastResult is not null)
+        {
+            <MudCard Elevation="2" Class="mt-4 checkin-result"
+                     Style="@($"border-radius:16px;border-left:5px solid {GetResultColor(_lastResult.Status)};")">
+                <MudCardContent>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <MudIcon Icon="@GetResultIcon(_lastResult.Status)"
+                                 Style="@($"color:{GetResultColor(_lastResult.Status)};font-size:2rem;")" />
+                        <div>
+                            <MudText Typo="Typo.subtitle2" Style="font-weight:700;">
+                                @_lastResult.ClientFullName
+                            </MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                @_lastResult.Message
+                            </MudText>
+                            @if (_lastResult.VisitsLeft.HasValue)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="mt-1">
+                                    Залишилось занять: @_lastResult.VisitsLeft
+                                </MudChip>
+                            }
+                        </div>
+                    </div>
+                </MudCardContent>
+            </MudCard>
+        }
+    </MudItem>
+
+    <MudItem xs="12" md="7">
+        <MudCard Elevation="3" Style="border-radius:20px;">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1" Style="font-weight:600;">
+                        Відвідування сьогодні
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">@_todayList.Count</MudChip>
+                    </MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Style="padding:0;">
+                @if (_todayList.Count == 0)
+                {
+                    <MudText Class="pa-4" Color="Color.Secondary">Відвідувань ще не було</MudText>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true">
+                        @foreach (var item in _todayList)
+                        {
+                            <MudListItem T="string">
+                                <div style="display:flex;justify-content:space-between;align-items:center;">
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="font-weight:600;">@item.PlanName</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@item.BarcodeSnapshot</MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">
+                                        @item.CheckedInAt.ToLocalTime().ToString("HH:mm")
+                                    </MudChip>
+                                </div>
+                            </MudListItem>
+                            <MudDivider />
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private string _barcode = string.Empty;
+    private bool _isLoading;
+    private bool _isScanning;
+    private CheckInResultDto? _lastResult;
+    private List<CheckInHistoryItemDto> _todayList = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JS.InvokeVoidAsync("clubInterop.focusElement", "#barcode-input");
+            await LoadToday();
+        }
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_barcode))
+            await ProcessScan();
+    }
+
+    private async Task ProcessManual()
+    {
+        if (!string.IsNullOrWhiteSpace(_barcode))
+            await ProcessScan();
+    }
+
+    private async Task ProcessScan()
+    {
+        _isLoading = true;
+        _isScanning = true;
+
+        var result = await CheckInService.ProcessScanAsync(_barcode.Trim());
+
+        if (result.IsSuccess)
+        {
+            _lastResult = result.Value;
+            await LoadToday();
+        }
+
+        _barcode = string.Empty;
+        _isLoading = false;
+        _isScanning = false;
+
+        await JS.InvokeVoidAsync("clubInterop.focusElement", "#barcode-input");
+    }
+
+    private async Task LoadToday()
+    {
+        var result = await CheckInService.GetTodayAsync();
+        if (result.IsSuccess)
+            _todayList = result.Value!.ToList();
+    }
+
+    private static string GetResultColor(CheckInResult status) => status switch
+    {
+        CheckInResult.Success => "#22C55E",
+        CheckInResult.AlreadyCheckedIn => "#F59E0B",
+        _ => "#EF4444"
+    };
+
+    private static string GetResultIcon(CheckInResult status) => status switch
+    {
+        CheckInResult.Success => Icons.Material.Filled.CheckCircle,
+        CheckInResult.AlreadyCheckedIn => Icons.Material.Filled.Info,
+        _ => Icons.Material.Filled.Cancel
+    };
+}

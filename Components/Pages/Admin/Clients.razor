@@ -1,0 +1,172 @@
+@page "/admin/clients"
+@layout Layout.AdminLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin,Receptionist")]
+
+@inject IClientProfileService ClientService
+@inject ISubscriptionService SubscriptionService
+@inject IPlanService PlanService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Клієнти — SportClub</PageTitle>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+    <MudText Typo="Typo.h5" Style="font-weight:700;color:#1E1B4B;">
+        <MudIcon Icon="@Icons.Material.Filled.People" Class="mr-2" Style="vertical-align:middle;" />
+        База клієнтів
+    </MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.PersonAdd"
+               OnClick="OpenAddDialog"
+               Style="border-radius:10px;">
+        Додати клієнта
+    </MudButton>
+</div>
+
+<MudDataGrid T="ClientListItemDto" ServerData="LoadData" @ref="_grid"
+             Virtualize="true" FixedHeader="true" Height="calc(100vh - 230px)"
+             Filterable="false" SortMode="SortMode.None"
+             Elevation="3" Style="border-radius:20px;">
+    <ToolBarContent>
+        <MudTextField @bind-Value="_searchTerm" Placeholder="Пошук за іменем, телефоном, баркодом..."
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined" Margin="Margin.Dense"
+                      DebounceInterval="400" OnDebounceIntervalElapsed="RefreshGrid"
+                      Style="min-width:320px;" />
+    </ToolBarContent>
+    <Columns>
+        <PropertyColumn Property="x => x.FullName" Title="Клієнт">
+            <CellTemplate>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <MudAvatar Color="Color.Primary" Size="Size.Small">
+                        @context.Item.FullName[0]
+                    </MudAvatar>
+                    <div>
+                        <MudText Typo="Typo.body2" Style="font-weight:600;">@context.Item.FullName</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Item.Email</MudText>
+                    </div>
+                </div>
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x.Phone" Title="Телефон" />
+        <PropertyColumn Property="x => x.Barcode" Title="Баркод">
+            <CellTemplate>
+                <MudChip T="string" Size="Size.Small" Color="Color.Dark">@context.Item.Barcode</MudChip>
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x.IsBlocked" Title="Статус">
+            <CellTemplate>
+                @if (context.Item.IsBlocked)
+                { <MudChip T="string" Size="Size.Small" Color="Color.Error">Заблоковано</MudChip> }
+                else
+                { <MudChip T="string" Size="Size.Small" Color="Color.Success">Активний</MudChip> }
+            </CellTemplate>
+        </PropertyColumn>
+        <PropertyColumn Property="x => x.CreatedAt" Title="Дата реєстрації">
+            <CellTemplate>
+                <MudText Typo="Typo.body2">@context.Item.CreatedAt.ToLocalTime().ToString("dd.MM.yyyy")</MudText>
+            </CellTemplate>
+        </PropertyColumn>
+        <TemplateColumn CellClass="d-flex justify-end" Title="">
+            <CellTemplate>
+                <MudTooltip Text="Деталі та абонементи">
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                                   OnClick="@(() => OpenDetailDialog(context.Item.Id))" />
+                </MudTooltip>
+                <MudTooltip Text="Редагувати">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                   OnClick="@(() => OpenEditDialog(context.Item.Id))" />
+                </MudTooltip>
+                <MudTooltip Text="@(context.Item.IsBlocked ? "Розблокувати" : "Заблокувати")">
+                    <MudIconButton Icon="@(context.Item.IsBlocked ? Icons.Material.Filled.LockOpen : Icons.Material.Filled.Lock)"
+                                   Size="Size.Small" Color="@(context.Item.IsBlocked ? Color.Success : Color.Warning)"
+                                   OnClick="@(() => ToggleBlock(context.Item.Id))" />
+                </MudTooltip>
+                <MudTooltip Text="Видалити">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                   OnClick="@(() => DeleteClient(context.Item.Id))" />
+                </MudTooltip>
+            </CellTemplate>
+        </TemplateColumn>
+    </Columns>
+    <PagerContent>
+        <MudDataGridPager T="ClientListItemDto" PageSizeOptions="new[] { 10, 25, 50 }" />
+    </PagerContent>
+</MudDataGrid>
+
+@code {
+    private MudDataGrid<ClientListItemDto> _grid = null!;
+    private string _searchTerm = string.Empty;
+
+    private async Task<GridData<ClientListItemDto>> LoadData(GridState<ClientListItemDto> state)
+    {
+        var request = new ServerDataRequest(state.Page + 1, state.PageSize, _searchTerm);
+        var result = await ClientService.GetPagedAsync(request);
+
+        if (!result.IsSuccess)
+            return new GridData<ClientListItemDto> { Items = [], TotalItems = 0 };
+
+        return new GridData<ClientListItemDto>
+        {
+            Items = result.Value!.Items,
+            TotalItems = result.Value.TotalCount
+        };
+    }
+
+    private async Task RefreshGrid() => await _grid.ReloadServerData();
+
+    private async Task OpenAddDialog()
+    {
+        var dialog = await DialogService.ShowAsync<Dialogs.AddClientDialog>("Додати клієнта");
+        var result = await dialog.Result;
+        if (!result!.Canceled) await RefreshGrid();
+    }
+
+    private async Task OpenEditDialog(int id)
+    {
+        var detail = await ClientService.GetByIdAsync(id);
+        if (!detail.IsSuccess) return;
+
+        var parameters = new DialogParameters<Dialogs.EditClientDialog>
+        {
+            { x => x.Client, detail.Value! }
+        };
+
+        var dialog = await DialogService.ShowAsync<Dialogs.EditClientDialog>("Редагування клієнта", parameters);
+        var result = await dialog.Result;
+        if (!result!.Canceled) await RefreshGrid();
+    }
+
+    private async Task OpenDetailDialog(int id)
+    {
+        var parameters = new DialogParameters<Dialogs.ClientDetailDialog>
+        {
+            { x => x.ClientId, id }
+        };
+        await DialogService.ShowAsync<Dialogs.ClientDetailDialog>("Деталі клієнта", parameters);
+    }
+
+    private async Task ToggleBlock(int id)
+    {
+        var result = await ClientService.ToggleBlockAsync(id);
+        Snackbar.Add(result.IsSuccess ? "Статус оновлено" : result.FirstError,
+            result.IsSuccess ? Severity.Success : Severity.Error);
+        if (result.IsSuccess) await RefreshGrid();
+    }
+
+    private async Task DeleteClient(int id)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Видалення", "Ви впевнені? Клієнта буде переміщено до архіву.",
+            yesText: "Видалити", cancelText: "Скасувати");
+
+        if (confirmed == true)
+        {
+            var result = await ClientService.DeleteAsync(id);
+            Snackbar.Add(result.IsSuccess ? "Клієнта видалено" : result.FirstError,
+                result.IsSuccess ? Severity.Success : Severity.Error);
+            if (result.IsSuccess) await RefreshGrid();
+        }
+    }
+}

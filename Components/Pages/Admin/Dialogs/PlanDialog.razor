@@ -1,0 +1,129 @@
+@inject IPlanService PlanService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@(Plan is null ? Icons.Material.Filled.Add : Icons.Material.Filled.Edit)" Class="mr-2" />
+            @(Plan is null ? "Новий тариф" : "Редагування тарифу")
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_valid">
+            <MudTextField @bind-Value="_model.Name" Label="Назва тарифу" Variant="Variant.Outlined"
+                          Required="true" RequiredError="Вкажіть назву" Class="mb-3" />
+            
+            <MudTextField @bind-Value="_model.Description" Label="Опис (необов'язково)" Variant="Variant.Outlined"
+                          Lines="2" Class="mb-3" />
+            
+            <MudNumericField @bind-Value="_model.Price" Label="Ціна (грн)" Variant="Variant.Outlined"
+                             Min="1" Required="true" RequiredError="Вкажіть ціну" Class="mb-3" />
+            
+            <div class="d-flex gap-4 mb-3">
+                <MudSelect T="PlanType" Label="Тип тарифу" @bind-Value="_model.PlanType" Variant="Variant.Outlined">
+                    <MudSelectItem Value="PlanType.Unlimited">Безлімітний</MudSelectItem>
+                    <MudSelectItem Value="PlanType.LimitedVisits">Лімітований</MudSelectItem>
+                </MudSelect>
+                
+                @if (_model.PlanType == PlanType.LimitedVisits)
+                {
+                    <MudNumericField @bind-Value="_model.MaxVisits" Label="Кількість занять" Variant="Variant.Outlined"
+                                     Min="1" Required="true" RequiredError="Вкажіть кількість" />
+                }
+            </div>
+
+            <div class="d-flex gap-4 mb-2">
+                <MudNumericField @bind-Value="_model.DurationValue" Label="Тривалість" Variant="Variant.Outlined"
+                                 Min="1" Required="true" RequiredError="Вкажіть тривалість" />
+                
+                <MudSelect T="PlanDurationUnit" Label="Одиниці" @bind-Value="_model.DurationUnit" Variant="Variant.Outlined">
+                    <MudSelectItem Value="PlanDurationUnit.Days">Днів</MudSelectItem>
+                    <MudSelectItem Value="PlanDurationUnit.Months">Місяців</MudSelectItem>
+                </MudSelect>
+            </div>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Скасувати</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_saving" OnClick="Submit">
+            @if (_saving) { <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" /> }
+            Зберегти
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public PlanDto? Plan { get; set; }
+
+    private MudForm _form = null!;
+    private bool _valid;
+    private bool _saving;
+
+    private PlanFormModel _model = new();
+
+    protected override void OnInitialized()
+    {
+        if (Plan is not null)
+        {
+            _model = new PlanFormModel
+            {
+                Name = Plan.Name,
+                Description = Plan.Description,
+                Price = Plan.Price,
+                PlanType = Plan.PlanType,
+                MaxVisits = Plan.MaxVisits,
+                DurationValue = Plan.DurationValue,
+                DurationUnit = Plan.DurationUnit
+            };
+        }
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_valid) return;
+
+        _saving = true;
+
+        Result<PlanDto> result;
+
+        if (Plan is null)
+        {
+            var dto = new CreatePlanDto(_model.Name, _model.Description, _model.Price, 
+                _model.PlanType, _model.MaxVisits, _model.DurationValue, _model.DurationUnit);
+            result = await PlanService.CreateAsync(dto);
+        }
+        else
+        {
+            var dto = new UpdatePlanDto(Plan.Id, _model.Name, _model.Description, _model.Price, 
+                _model.PlanType, _model.MaxVisits, _model.DurationValue, _model.DurationUnit);
+            result = await PlanService.UpdateAsync(dto);
+        }
+
+        if (result.IsSuccess)
+        {
+            Snackbar.Add("Тариф успішно збережено", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add(result.FirstError, Severity.Error);
+        }
+
+        _saving = false;
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private class PlanFormModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public decimal Price { get; set; } = 1000;
+        public PlanType PlanType { get; set; } = PlanType.Unlimited;
+        public int? MaxVisits { get; set; }
+        public int DurationValue { get; set; } = 1;
+        public PlanDurationUnit DurationUnit { get; set; } = PlanDurationUnit.Months;
+    }
+}

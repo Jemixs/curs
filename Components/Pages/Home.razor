@@ -1,0 +1,23 @@
+@page "/"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthState
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        var role = state.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+
+        var target = role switch
+        {
+            "Admin" or "Receptionist" => "/admin",
+            "Client" => "/client",
+            _ => "/login"
+        };
+
+        Nav.NavigateTo(target, forceLoad: true);
+    }
+}
