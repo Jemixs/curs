@@ -169,15 +169,16 @@
 
     private async Task Freeze(int subId)
     {
-        var result = await SubscriptionService.FreezeAsync(subId);
-        Snackbar.Add(result.IsSuccess ? "Абонемент заморожено" : result.FirstError, 
+        // Для адмін-панелі тимчасово заморожуємо на 30 днів (у майбутньому можна додати діалог вибору днів)
+        var result = await SubscriptionService.FreezeSubscriptionAsync(subId, 30);
+        Snackbar.Add(result.IsSuccess ? "Абонемент заморожено на 30 днів" : result.FirstError, 
             result.IsSuccess ? Severity.Success : Severity.Error);
         if (result.IsSuccess) await LoadData();
     }
 
     private async Task Unfreeze(int subId)
     {
-        var result = await SubscriptionService.UnfreezeAsync(subId);
+        var result = await SubscriptionService.UnfreezeSubscriptionAsync(subId);
         Snackbar.Add(result.IsSuccess ? "Абонемент розморожено" : result.FirstError, 
             result.IsSuccess ? Severity.Success : Severity.Error);
         if (result.IsSuccess) await LoadData();

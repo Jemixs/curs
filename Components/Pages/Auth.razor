@@ -1,0 +1,258 @@
+@page "/login"
+@page "/auth"
+@layout SportClub.Components.Layout.PublicLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@using SportClub.Application.DTOs
+@using SportClub.Application.Interfaces
+
+@inject IAuthService AuthService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Вхід / Реєстрація — SportClub</PageTitle>
+
+<div style="min-height:100vh; background:#F4F6FB; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <MudPaper Elevation="2" Style="max-width:420px; width:100%; border-radius:24px; padding:40px; background:white;">
+        
+        <div style="text-align:center; margin-bottom:32px;">
+            <div style="width:64px; height:64px; border-radius:20px; background:linear-gradient(135deg,#6C63FF,#4FACFE);
+                        display:flex; align-items:center; justify-content:center; margin:0 auto 16px;">
+                <MudIcon Icon="@Icons.Material.Filled.FitnessCenter" Style="color:white; font-size:32px;" />
+            </div>
+            <MudText Typo="Typo.h5" Style="font-weight:800; color:#1E1B4B; margin-bottom:8px;">
+                @(_step == AuthStep.PhoneInput ? "Вхід у SportClub" : "Введіть код з SMS")
+            </MudText>
+            <MudText Typo="Typo.body2" Style="color:#6B7280;">
+                @(_step == AuthStep.PhoneInput 
+                    ? "Введіть ваш номер телефону для авторизації або реєстрації." 
+                    : $"Код відправлено на номер {_phone}")
+            </MudText>
+        </div>
+
+        @if (_step == AuthStep.PhoneInput)
+        {
+            <MudForm @ref="_phoneForm" IsValidChanged="OnPhoneValidChanged">
+                <MudTextField @bind-Value="_phone" 
+                              Label="Номер телефону" 
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense"
+                              Mask="_phoneMask"
+                              Placeholder="50 123 45 67"
+                              Adornment="Adornment.Start"
+                              AdornmentText="+380"
+                              Immediate="true"
+                              Clearable="true"
+                              Style="background:#F9FAFB; border-radius:12px; margin-bottom:16px;"
+                              OnBlur="CheckUserExistsAsync"
+                              Required="true"/>
+
+                @if (_showRegistrationFields)
+                {
+                    <div style="animation:fadeIn 0.3s ease;">
+                        <MudText Typo="Typo.body2" Style="color:#6B7280; margin-bottom:12px;">
+                            Схоже, ви тут вперше! Введіть ім'я для реєстрації:
+                        </MudText>
+                        <MudTextField @bind-Value="_firstName" 
+                                      Label="Ім'я" 
+                                      Variant="Variant.Outlined" 
+                                      Margin="Margin.Dense"
+                                      Required="true"
+                                      Style="background:#F9FAFB; border-radius:12px; margin-bottom:12px;" />
+                                      
+                        <MudTextField @bind-Value="_lastName" 
+                                      Label="Прізвище" 
+                                      Variant="Variant.Outlined" 
+                                      Margin="Margin.Dense"
+                                      Required="true"
+                                      Style="background:#F9FAFB; border-radius:12px; margin-bottom:16px;" />
+                    </div>
+                }
+
+                <MudButton Variant="Variant.Filled" 
+                           FullWidth="true" 
+                           Disabled="@(!_isPhoneValid || _isLoading)"
+                           OnClick="RequestOtpAsync"
+                           Style="background:linear-gradient(135deg,#6C63FF,#4FACFE); color:white;
+                                  border-radius:14px; padding:12px; font-weight:700; margin-top:8px;">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Отримати код
+                </MudButton>
+            </MudForm>
+        }
+        else if (_step == AuthStep.OtpInput)
+        {
+            <div style="text-align:center; margin-bottom:24px;">
+                <!-- Спрощена імітація 4 квадратиків (одне поле по центру з маскою) -->
+                <MudTextField @bind-Value="_otpCode" 
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Mask="_otpMask"
+                              Immediate="true"
+                              Style="font-size:32px; letter-spacing:16px; text-align:center; padding-left:16px;
+                                     background:#F9FAFB; border-radius:12px; height:64px; font-weight:700; color:#1E1B4B;"
+                              AutoFocus="true"
+                              MaxLength="4"
+                              OnKeyUp="OnOtpKeyUp"/>
+            </div>
+
+            <MudButton Variant="Variant.Filled" 
+                       FullWidth="true" 
+                       Disabled="@(_otpCode.Length != 4 || _isLoading)"
+                       OnClick="VerifyOtpAsync"
+                       Style="background:linear-gradient(135deg,#6C63FF,#4FACFE); color:white;
+                              border-radius:14px; padding:12px; font-weight:700;">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Підтвердити
+            </MudButton>
+            
+            <div style="text-align:center; margin-top:20px;">
+                <MudButton Variant="Variant.Text" 
+                           Style="color:#6B7280; font-size:0.85rem;"
+                           OnClick="GoBackToPhone">
+                    Змінити номер телефону
+                </MudButton>
+            </div>
+        }
+    </MudPaper>
+</div>
+
+<style>
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Center the text inside the OTP field */
+    .mud-input-slot {
+        text-align: center !important;
+    }
+</style>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    private enum AuthStep { PhoneInput, OtpInput }
+    private AuthStep _step = AuthStep.PhoneInput;
+    
+    private MudForm _phoneForm = null!;
+    private string _phone = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string _otpCode = string.Empty;
+    
+    private bool _isPhoneValid = false;
+    private bool _showRegistrationFields = false;
+    private bool _isLoading = false;
+
+    private IMask _phoneMask = new PatternMask("00 000 00 00");
+    private IMask _otpMask = new PatternMask("0000");
+
+    private void OnPhoneValidChanged(bool isValid)
+    {
+        _isPhoneValid = isValid;
+    }
+
+    private async Task CheckUserExistsAsync()
+    {
+        // Очищуємо від пробілів та масок, додаємо префікс
+        var cleanDigits = new string(_phone.Where(char.IsDigit).ToArray());
+        if (cleanDigits.Length < 9) return; 
+        
+        var fullPhone = "+380" + cleanDigits;
+
+        var exists = await AuthService.CheckUserExistsAsync(fullPhone);
+        _showRegistrationFields = !exists;
+    }
+
+    private async Task RequestOtpAsync()
+    {
+        await _phoneForm.Validate();
+        if (!_phoneForm.IsValid) return;
+
+        if (_showRegistrationFields && (string.IsNullOrWhiteSpace(_firstName) || string.IsNullOrWhiteSpace(_lastName)))
+        {
+            Snackbar.Add("Будь ласка, введіть ім'я та прізвище.", Severity.Warning);
+            return;
+        }
+
+        _isLoading = true;
+        
+        var cleanPhone = "+380" + new string(_phone.Where(char.IsDigit).ToArray());
+        var result = await AuthService.RequestOtpAsync(cleanPhone);
+        
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            // Показуємо код користувачу (для тестування)
+            Snackbar.Add($"Тестовий SMS-код: {result.Value}", Severity.Info, config =>
+            {
+                config.RequireInteraction = true;
+                config.ShowCloseIcon = true;
+            });
+            
+            _step = AuthStep.OtpInput;
+            _otpCode = string.Empty;
+        }
+        else
+        {
+            Snackbar.Add(result.FirstError, Severity.Error);
+        }
+    }
+
+    private async Task OnOtpKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && _otpCode.Length == 4)
+        {
+            await VerifyOtpAsync();
+        }
+    }
+
+    private async Task VerifyOtpAsync()
+    {
+        if (_otpCode.Length != 4) return;
+        
+        _isLoading = true;
+        
+        var cleanPhone = "+380" + new string(_phone.Where(char.IsDigit).ToArray());
+        var dto = new VerifyOtpDto(cleanPhone, _otpCode, _firstName, _lastName);
+        
+        var result = await AuthService.VerifyOtpAndLoginAsync(dto);
+        
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            var user = result.Value!;
+            var loginToken = user.Email; // Ми передали токен у полі Email для спрощення
+
+            Snackbar.Add($"Код підтверджено! Входимо...", Severity.Success);
+            
+            var target = string.IsNullOrWhiteSpace(ReturnUrl) 
+                ? (user.Role == "Client" ? "/client/dashboard" : "/admin")
+                : ReturnUrl;
+
+            // Виконуємо редірект через HTTP endpoint для встановлення Cookies
+            var callbackUrl = $"/auth/signin-callback?token={loginToken}&returnUrl={Uri.EscapeDataString(target)}";
+            Nav.NavigateTo(callbackUrl, forceLoad: true);
+        }
+        else
+        {
+            Snackbar.Add(result.FirstError, Severity.Error);
+            _otpCode = string.Empty; // Скидаємо невірний код
+        }
+    }
+
+    private void GoBackToPhone()
+    {
+        _step = AuthStep.PhoneInput;
+        _otpCode = string.Empty;
+    }
+}

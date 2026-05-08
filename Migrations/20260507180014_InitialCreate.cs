@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #pragma warning disable CA1814 // Prefer jagged arrays over multidimensional
 
-namespace SportClub.Data.Migrations
+namespace SportClub.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -35,6 +35,40 @@ namespace SportClub.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "PromoCodes",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Code = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    DiscountPercentage = table.Column<int>(type: "INTEGER", nullable: false),
+                    ExpiryDate = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    MaxUses = table.Column<int>(type: "INTEGER", nullable: true),
+                    CurrentUses = table.Column<int>(type: "INTEGER", nullable: false),
+                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Version = table.Column<Guid>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_PromoCodes", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Trainers",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    FullName = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    Specialization = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Trainers", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Users",
                 columns: table => new
                 {
@@ -52,6 +86,31 @@ namespace SportClub.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ClassSessions",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    Title = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    TrainerId = table.Column<int>(type: "INTEGER", nullable: false),
+                    StartTime = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    EndTime = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    MaxParticipants = table.Column<int>(type: "INTEGER", nullable: false),
+                    IsCancelled = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Version = table.Column<Guid>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ClassSessions", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ClassSessions_Trainers_TrainerId",
+                        column: x => x.TrainerId,
+                        principalTable: "Trainers",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "ClientProfiles",
                 columns: table => new
                 {
@@ -64,6 +123,7 @@ namespace SportClub.Data.Migrations
                     Notes = table.Column<string>(type: "TEXT", maxLength: 1000, nullable: true),
                     IsBlocked = table.Column<bool>(type: "INTEGER", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    BonusBalance = table.Column<decimal>(type: "decimal(10,2)", nullable: false, defaultValue: 0m),
                     IsDeleted = table.Column<bool>(type: "INTEGER", nullable: false, defaultValue: false)
                 },
                 constraints: table =>
@@ -78,6 +138,34 @@ namespace SportClub.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "ClassBookings",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    SessionId = table.Column<int>(type: "INTEGER", nullable: false),
+                    ClientProfileId = table.Column<int>(type: "INTEGER", nullable: false),
+                    BookingTime = table.Column<DateTime>(type: "TEXT", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_ClassBookings", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_ClassBookings_ClassSessions_SessionId",
+                        column: x => x.SessionId,
+                        principalTable: "ClassSessions",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_ClassBookings_ClientProfiles_ClientProfileId",
+                        column: x => x.ClientProfileId,
+                        principalTable: "ClientProfiles",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Subscriptions",
                 columns: table => new
                 {
@@ -85,6 +173,7 @@ namespace SportClub.Data.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     ClientProfileId = table.Column<int>(type: "INTEGER", nullable: false),
                     PlanId = table.Column<int>(type: "INTEGER", nullable: false),
+                    FinalPrice = table.Column<decimal>(type: "decimal(10,2)", nullable: false, defaultValue: 0m),
                     PurchaseDate = table.Column<DateTime>(type: "TEXT", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
                     ActivationDate = table.Column<DateTime>(type: "TEXT", nullable: true),
                     ExpirationDate = table.Column<DateTime>(type: "TEXT", nullable: true),
@@ -155,9 +244,9 @@ namespace SportClub.Data.Migrations
                 columns: new[] { "Id", "CreatedAt", "Email", "FullName", "PasswordHash", "Role" },
                 values: new object[,]
                 {
-                    { 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@sportclub.ua", "Адміністратор", "$2a$11$qcb/Xp9bOOGAtMPG3eHAjOyfUWMr/UFFqCbbcYsjI93Bfc7/R0ZZ6", "Admin" },
-                    { 2, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "reception@sportclub.ua", "Рецепціоніст", "$2a$11$Ys2odVm45GEouw5Qf654reScCNYd7JvboX2.U.wvEiZm/2f0VIGiy", "Receptionist" },
-                    { 3, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "client@sportclub.ua", "Іван Петренко", "$2a$11$0W7fs1YtMQZN82.hvJTVIub0ZBiF0.kF/MMRjqeuc2YTEZfznvrp.", "Client" }
+                    { 1, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "admin@sportclub.ua", "Адміністратор", "$2a$11$7K.x2aMtgKjlUTCHW5WukuHlTBk.udiKfYENuiliNEiv/eJLaH3l6", "Admin" },
+                    { 2, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "reception@sportclub.ua", "Рецепціоніст", "$2a$11$DdyT8.9KAhPev.x..O7e9eEziR2nTx1h4qbf3RkS1qZ68UDKQtbta", "Receptionist" },
+                    { 3, new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc), "client@sportclub.ua", "Іван Петренко", "$2a$11$p9zWi0UYPQgILSYSnk4veuLPrAu42Z13vP63H0brNQ/drTETCFSUS", "Client" }
                 });
 
             migrationBuilder.InsertData(
@@ -176,6 +265,22 @@ namespace SportClub.Data.Migrations
                 column: "SubscriptionId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_ClassBookings_ClientProfileId",
+                table: "ClassBookings",
+                column: "ClientProfileId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ClassBookings_Session_Client",
+                table: "ClassBookings",
+                columns: new[] { "SessionId", "ClientProfileId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_ClassSessions_TrainerId",
+                table: "ClassSessions",
+                column: "TrainerId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_ClientProfiles_Barcode",
                 table: "ClientProfiles",
                 column: "Barcode",
@@ -191,6 +296,12 @@ namespace SportClub.Data.Migrations
                 name: "IX_ClientProfiles_UserId",
                 table: "ClientProfiles",
                 column: "UserId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_PromoCodes_Code",
+                table: "PromoCodes",
+                column: "Code",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -217,13 +328,25 @@ namespace SportClub.Data.Migrations
                 name: "CheckIns");
 
             migrationBuilder.DropTable(
+                name: "ClassBookings");
+
+            migrationBuilder.DropTable(
+                name: "PromoCodes");
+
+            migrationBuilder.DropTable(
                 name: "Subscriptions");
+
+            migrationBuilder.DropTable(
+                name: "ClassSessions");
 
             migrationBuilder.DropTable(
                 name: "ClientProfiles");
 
             migrationBuilder.DropTable(
                 name: "Plans");
+
+            migrationBuilder.DropTable(
+                name: "Trainers");
 
             migrationBuilder.DropTable(
                 name: "Users");

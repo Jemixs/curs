@@ -1,14 +1,7 @@
 namespace SportClub.Domain.Exceptions;
 
-// ─────────────────────────────────────────────────────────────
-//  Base business exception
-// ─────────────────────────────────────────────────────────────
+// Base business exception
 
-/// <summary>
-/// Thrown when an operation violates a business rule.
-/// These are expected, domain-level errors (not bugs) and should
-/// be caught at the service/UI boundary and translated to user messages.
-/// </summary>
 public class BusinessRuleValidationException : Exception
 {
     public string Code { get; }
@@ -26,9 +19,7 @@ public class BusinessRuleValidationException : Exception
     }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Specialised domain exceptions
-// ─────────────────────────────────────────────────────────────
+// Specialised domain exceptions
 
 public sealed class ClientNotFoundException : BusinessRuleValidationException
 {

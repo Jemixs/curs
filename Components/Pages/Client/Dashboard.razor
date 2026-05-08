@@ -1,12 +1,16 @@
 @page "/client"
+@page "/client/dashboard"
 @layout Layout.ClientLayout
 @rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
 @attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Client")]
 
 @using QRCoder
+@using SportClub.Components.Pages.Client.Dialogs
 @inject IAuthService AuthService
 @inject IClientProfileService ClientService
 @inject ISubscriptionService SubscriptionService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 
 <PageTitle>Головна — SportClub</PageTitle>
 
@@ -56,10 +60,23 @@ else if (_client is not null)
         }
         else
         {
-            <MudCard Elevation="2" Style="border-radius:16px; background:linear-gradient(135deg, #6C63FF, #4FACFE); color:white;">
+            var isFrozen = _activeSubscription.IsFrozen;
+            var cardStyle = isFrozen 
+                ? "border-radius:16px; background:linear-gradient(135deg, #9CA3AF, #6B7280); color:white;"
+                : "border-radius:16px; background:linear-gradient(135deg, #6C63FF, #4FACFE); color:white;";
+
+            <MudCard Elevation="2" Style="@cardStyle">
                 <MudCardContent>
                     <div class="d-flex justify-space-between align-center mb-4">
-                        <MudText Typo="Typo.h6" Style="font-weight:700;">@_activeSubscription.Plan.Name</MudText>
+                        <div>
+                            <MudText Typo="Typo.h6" Style="font-weight:700;">@_activeSubscription.Plan.Name</MudText>
+                            @if (isFrozen)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="mt-1">
+                                    Заморожено до @_activeSubscription.ExpirationDate?.ToLocalTime().ToString("dd.MM.yyyy")
+                                </MudChip>
+                            }
+                        </div>
                         <MudIcon Icon="@Icons.Material.Filled.CreditCard" />
                     </div>
 
@@ -92,6 +109,27 @@ else if (_client is not null)
                             </div>
                         }
                     }
+
+                    <div class="mt-4 pt-4" style="border-top:1px solid rgba(255,255,255,0.2);">
+                        @if (isFrozen)
+                        {
+                            <MudButton Variant="Variant.Filled" 
+                                       Style="background:white; color:#1E1B4B; font-weight:700;" 
+                                       FullWidth="true"
+                                       OnClick="UnfreezeSubscription">
+                                Розморозити
+                            </MudButton>
+                        }
+                        else if (_activeSubscription.ActivationDate is not null)
+                        {
+                            <MudButton Variant="Variant.Outlined" 
+                                       Style="border-color:white; color:white; font-weight:700;" 
+                                       FullWidth="true"
+                                       OnClick="FreezeSubscription">
+                                Призупинити (Заморозити)
+                            </MudButton>
+                        }
+                    </div>
                 </MudCardContent>
             </MudCard>
         }
@@ -134,5 +172,53 @@ else if (_client is not null)
         using var qrCode = new PngByteQRCode(qrCodeData);
         var qrCodeImage = qrCode.GetGraphic(20, new byte[] { 108, 99, 255, 255 }, new byte[] { 255, 255, 255, 0 });
         _qrCodeBase64 = Convert.ToBase64String(qrCodeImage);
+    }
+
+    private async Task FreezeSubscription()
+    {
+        if (_activeSubscription == null) return;
+
+        var dialog = await DialogService.ShowAsync<FreezeDialog>("Заморозка");
+        var result = await dialog.Result;
+
+        if (!result!.Canceled && result.Data is int daysToFreeze)
+        {
+            var res = await SubscriptionService.FreezeSubscriptionAsync(_activeSubscription.Id, daysToFreeze);
+            if (res.IsSuccess)
+            {
+                Snackbar.Add($"Абонемент заморожено на {daysToFreeze} днів", Severity.Success);
+                await ReloadSubscription();
+            }
+            else
+            {
+                Snackbar.Add(res.FirstError, Severity.Error);
+            }
+        }
+    }
+
+    private async Task UnfreezeSubscription()
+    {
+        if (_activeSubscription == null) return;
+
+        var res = await SubscriptionService.UnfreezeSubscriptionAsync(_activeSubscription.Id);
+        if (res.IsSuccess)
+        {
+            Snackbar.Add("Абонемент розморожено", Severity.Success);
+            await ReloadSubscription();
+        }
+        else
+        {
+            Snackbar.Add(res.FirstError, Severity.Error);
+        }
+    }
+
+    private async Task ReloadSubscription()
+    {
+        if (_client != null)
+        {
+            var subRes = await SubscriptionService.GetActiveAsync(_client.Id);
+            _activeSubscription = subRes.IsSuccess ? subRes.Value : null;
+            StateHasChanged();
+        }
     }
 }

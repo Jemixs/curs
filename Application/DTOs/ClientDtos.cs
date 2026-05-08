@@ -4,6 +4,14 @@ public sealed record LoginDto(
     string Email,
     string Password);
 
+public sealed record RequestOtpDto(string Phone);
+
+public sealed record VerifyOtpDto(
+    string Phone,
+    string Code,
+    string? FirstName = null,
+    string? LastName = null);
+
 public sealed record RegisterClientDto(
     string Email,
     string Password,
@@ -41,6 +49,7 @@ public sealed record ClientDetailDto(
     DateTime DateOfBirth,
     string? Notes,
     bool IsBlocked,
+    decimal BonusBalance,
     DateTime CreatedAt,
     IReadOnlyList<SubscriptionDto> Subscriptions);
 

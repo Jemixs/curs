@@ -9,26 +9,32 @@ public class ApplicationDbContext : DbContext
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options) { }
 
-    // ── DbSets ───────────────────────────────────────────────
+    // Таблиці БД
     public DbSet<User> Users => Set<User>();
     public DbSet<ClientProfile> ClientProfiles => Set<ClientProfile>();
     public DbSet<Plan> Plans => Set<Plan>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<CheckIn> CheckIns => Set<CheckIn>();
 
-    // ────────────────────────────────────────────────────────
+    // Додаткові модулі
+    public DbSet<Trainer> Trainers => Set<Trainer>();
+    public DbSet<ClassSession> ClassSessions => Set<ClassSession>();
+    public DbSet<ClassBooking> ClassBookings => Set<ClassBooking>();
+    public DbSet<PromoCode> PromoCodes => Set<PromoCode>();
+
+
     protected override void OnModelCreating(ModelBuilder mb)
     {
         base.OnModelCreating(mb);
 
-        // ── Global query filters (soft-delete) ───────────────
+        // Глобальні фільтри (м'яке видалення)
         mb.Entity<Plan>()
             .HasQueryFilter(p => !p.IsArchived);
 
         mb.Entity<ClientProfile>()
             .HasQueryFilter(cp => !EF.Property<bool>(cp, "IsDeleted"));
 
-        // ── User ─────────────────────────────────────────────
+        // Налаштування користувача
         mb.Entity<User>(e =>
         {
             e.ToTable("Users");
@@ -42,8 +48,7 @@ public class ApplicationDbContext : DbContext
                 .IsUnique()
                 .HasDatabaseName("IX_Users_Email");
 
-            e.Property(u => u.PasswordHash)
-                .IsRequired();
+            e.Property(u => u.PasswordHash);
 
             e.Property(u => u.FullName)
                 .IsRequired()
@@ -56,20 +61,24 @@ public class ApplicationDbContext : DbContext
             e.Property(u => u.CreatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-            // Relationship: User 1—0..1 ClientProfile
+            // Зв'язок 1 до 0..1 між користувачем та профілем клієнта
             e.HasOne(u => u.ClientProfile)
                 .WithOne(cp => cp.User)
                 .HasForeignKey<ClientProfile>(cp => cp.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ── ClientProfile ─────────────────────────────────────
+        // Налаштування профілю клієнта
         mb.Entity<ClientProfile>(e =>
         {
             e.ToTable("ClientProfiles");
             e.HasKey(cp => cp.Id);
 
-            // Shadow property for soft-delete
+            e.Property(cp => cp.BonusBalance)
+                .HasColumnType("decimal(10,2)")
+                .HasDefaultValue(0m);
+
+            // Тіньова властивість для м'якого видалення
             e.Property<bool>("IsDeleted")
                 .HasDefaultValue(false);
 
@@ -77,7 +86,7 @@ public class ApplicationDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(20);
 
-            // Unique index on Phone for O(1) lookup
+            // Індекс для швидкого пошуку за номером телефону
             e.HasIndex(cp => cp.Phone)
                 .IsUnique()
                 .HasDatabaseName("IX_ClientProfiles_Phone");
@@ -86,7 +95,7 @@ public class ApplicationDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(128);
 
-            // Unique index on Barcode for O(1) QR scan
+            // Індекс для швидкого пошуку за баркодом
             e.HasIndex(cp => cp.Barcode)
                 .IsUnique()
                 .HasDatabaseName("IX_ClientProfiles_Barcode");
@@ -98,7 +107,7 @@ public class ApplicationDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
-        // ── Plan ─────────────────────────────────────────────
+        // Налаштування тарифів
         mb.Entity<Plan>(e =>
         {
             e.ToTable("Plans");
@@ -126,7 +135,7 @@ public class ApplicationDbContext : DbContext
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
         });
 
-        // ── Subscription ─────────────────────────────────────
+        // Налаштування абонементів
         mb.Entity<Subscription>(e =>
         {
             e.ToTable("Subscriptions");
@@ -135,10 +144,14 @@ public class ApplicationDbContext : DbContext
             e.Property(s => s.PurchaseDate)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+            e.Property(s => s.FinalPrice)
+                .HasColumnType("decimal(10,2)")
+                .HasDefaultValue(0m);
+
             e.Property(s => s.CreatedAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-            // Ignore computed property — not stored in DB
+            // Ігноруємо обчислювану властивість
             e.Ignore(s => s.IsActive);
 
             e.HasOne(s => s.ClientProfile)
@@ -152,7 +165,7 @@ public class ApplicationDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
-        // ── CheckIn ───────────────────────────────────────────
+        // Налаштування відвідувань
         mb.Entity<CheckIn>(e =>
         {
             e.ToTable("CheckIns");
@@ -165,7 +178,7 @@ public class ApplicationDbContext : DbContext
             e.Property(ci => ci.CheckedInAt)
                 .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
-            // Index for debounce lookup: (ClientProfileId, CheckedInAt DESC)
+            // Індекс для перевірки дублікатів входу
             e.HasIndex(ci => new { ci.ClientProfileId, ci.CheckedInAt })
                 .HasDatabaseName("IX_CheckIns_ClientProfile_Time");
 
@@ -180,117 +193,87 @@ public class ApplicationDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // ── Seed data ─────────────────────────────────────────
-        SeedData(mb);
+        // Тренери
+        mb.Entity<Trainer>(e =>
+        {
+            e.ToTable("Trainers");
+            e.HasKey(t => t.Id);
+
+            e.Property(t => t.FullName)
+                .IsRequired()
+                .HasMaxLength(256);
+
+            e.Property(t => t.Specialization)
+                .HasMaxLength(256);
+        });
+
+        // Групові заняття
+        mb.Entity<ClassSession>(e =>
+        {
+            e.ToTable("ClassSessions");
+            e.HasKey(cs => cs.Id);
+
+            e.Property(cs => cs.Title)
+                .IsRequired()
+                .HasMaxLength(256);
+
+            e.Property(cs => cs.Version)
+                .IsConcurrencyToken();
+
+            e.HasOne(cs => cs.Trainer)
+                .WithMany(t => t.Sessions)
+                .HasForeignKey(cs => cs.TrainerId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Бронювання занять
+        mb.Entity<ClassBooking>(e =>
+        {
+            e.ToTable("ClassBookings");
+            e.HasKey(cb => cb.Id);
+
+            e.Property(cb => cb.Status)
+                .HasConversion<string>()
+                .HasMaxLength(32);
+
+            e.Property(cb => cb.BookingTime)
+                .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+            // Обмеження, щоб клієнт не міг записатися двічі на одне заняття
+            e.HasIndex(cb => new { cb.SessionId, cb.ClientProfileId })
+                .IsUnique()
+                .HasDatabaseName("IX_ClassBookings_Session_Client");
+
+            e.HasOne(cb => cb.Session)
+                .WithMany(cs => cs.Bookings)
+                .HasForeignKey(cb => cb.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            e.HasOne(cb => cb.Client)
+                .WithMany(cp => cp.ClassBookings)
+                .HasForeignKey(cb => cb.ClientProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Промокоди
+        mb.Entity<PromoCode>(e =>
+        {
+            e.ToTable("PromoCodes");
+            e.HasKey(pc => pc.Id);
+
+            e.Property(pc => pc.Code)
+                .IsRequired()
+                .HasMaxLength(64);
+
+            e.HasIndex(pc => pc.Code)
+                .IsUnique()
+                .HasDatabaseName("IX_PromoCodes_Code");
+
+            e.Property(pc => pc.Version)
+                .IsConcurrencyToken();
+        });
+
+        // Початкові дані тепер обробляються через DbInitializer
     }
 
-    // ────────────────────────────────────────────────────────
-    private static void SeedData(ModelBuilder mb)
-    {
-        var now = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-
-        // ── Admin user ───────────────────────────────────────
-        mb.Entity<User>().HasData(new User
-        {
-            Id = 1,
-            Email = "admin@sportclub.ua",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin1234!"),
-            Role = UserRole.Admin,
-            FullName = "Адміністратор",
-            CreatedAt = now
-        });
-
-        // ── Receptionist ─────────────────────────────────────
-        mb.Entity<User>().HasData(new User
-        {
-            Id = 2,
-            Email = "reception@sportclub.ua",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Recept1234!"),
-            Role = UserRole.Receptionist,
-            FullName = "Рецепціоніст",
-            CreatedAt = now
-        });
-
-        // ── Sample client user ───────────────────────────────
-        mb.Entity<User>().HasData(new User
-        {
-            Id = 3,
-            Email = "client@sportclub.ua",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Client1234!"),
-            Role = UserRole.Client,
-            FullName = "Іван Петренко",
-            CreatedAt = now
-        });
-
-        // ── Sample client profile ─────────────────────────────
-        // We use an anonymous object to set shadow property IsDeleted
-        mb.Entity<ClientProfile>().HasData(new
-        {
-            Id = 1,
-            UserId = 3,
-            Phone = "+380501234567",
-            Barcode = "SC-000001",
-            DateOfBirth = new DateTime(1990, 5, 15, 0, 0, 0, DateTimeKind.Utc),
-            Notes = (string?)null,
-            IsBlocked = false,
-            CreatedAt = now,
-            IsDeleted = false
-        });
-
-        // ── Plans ────────────────────────────────────────────
-        mb.Entity<Plan>().HasData(
-            new Plan
-            {
-                Id = 1,
-                Name = "Місячний безлімітний",
-                Description = "Необмежені відвідування протягом 30 днів",
-                Price = 1200m,
-                PlanType = PlanType.Unlimited,
-                MaxVisits = null,
-                DurationValue = 1,
-                DurationUnit = PlanDurationUnit.Months,
-                IsArchived = false,
-                CreatedAt = now
-            },
-            new Plan
-            {
-                Id = 2,
-                Name = "8 занять",
-                Description = "8 відвідувань, дійсний 60 днів",
-                Price = 800m,
-                PlanType = PlanType.LimitedVisits,
-                MaxVisits = 8,
-                DurationValue = 60,
-                DurationUnit = PlanDurationUnit.Days,
-                IsArchived = false,
-                CreatedAt = now
-            },
-            new Plan
-            {
-                Id = 3,
-                Name = "12 занять",
-                Description = "12 відвідувань, дійсний 90 днів",
-                Price = 1100m,
-                PlanType = PlanType.LimitedVisits,
-                MaxVisits = 12,
-                DurationValue = 90,
-                DurationUnit = PlanDurationUnit.Days,
-                IsArchived = false,
-                CreatedAt = now
-            },
-            new Plan
-            {
-                Id = 4,
-                Name = "Квартальний безлімітний",
-                Description = "Необмежені відвідування протягом 3 місяців",
-                Price = 3000m,
-                PlanType = PlanType.Unlimited,
-                MaxVisits = null,
-                DurationValue = 3,
-                DurationUnit = PlanDurationUnit.Months,
-                IsArchived = false,
-                CreatedAt = now
-            }
-        );
-    }
 }

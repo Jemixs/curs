@@ -1,0 +1,91 @@
+@page "/admin/login"
+@layout SportClub.Components.Layout.EmptyLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+
+@using SportClub.Application.Interfaces
+@inject IAuthService AuthService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Вхід для адміністратора</PageTitle>
+
+<div style="min-height:100vh; background:#1E1B4B; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <MudPaper Elevation="4" Style="max-width:400px; width:100%; border-radius:16px; padding:32px;">
+        <div class="text-center mb-6">
+            <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Color="Color.Primary" Style="font-size:48px;" />
+            <MudText Typo="Typo.h5" Style="font-weight:700; margin-top:16px; color:#1E1B4B;">Панель керування</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Спортивний клуб</MudText>
+        </div>
+
+        <MudForm @ref="_form" @bind-IsValid="@_success">
+            <MudTextField @bind-Value="_login" 
+                          Label="Логін або Телефон" 
+                          Variant="Variant.Outlined" 
+                          Margin="Margin.Dense"
+                          Required="true"
+                          RequiredError="Введіть логін"
+                          Class="mb-4" />
+                          
+            <MudTextField @bind-Value="_password" 
+                          Label="Пароль" 
+                          Variant="Variant.Outlined" 
+                          Margin="Margin.Dense"
+                          InputType="InputType.Password"
+                          Required="true"
+                          RequiredError="Введіть пароль"
+                          Class="mb-6" />
+
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       FullWidth="true" 
+                       Size="Size.Large"
+                       Disabled="@(!_success || _isLoading)"
+                       OnClick="HandleLogin">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Увійти
+            </MudButton>
+        </MudForm>
+    </MudPaper>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    private MudForm _form = null!;
+    private bool _success;
+    private bool _isLoading;
+
+    private string _login = string.Empty;
+    private string _password = string.Empty;
+
+    private async Task HandleLogin()
+    {
+        await _form.Validate();
+        if (!_form.IsValid) return;
+
+        _isLoading = true;
+        
+        var result = await AuthService.LoginAdminAsync(_login, _password);
+        
+        _isLoading = false;
+
+        if (result.IsSuccess)
+        {
+            var user = result.Value!;
+            var loginToken = user.Email;
+            
+            var target = string.IsNullOrWhiteSpace(ReturnUrl) ? "/admin" : ReturnUrl;
+            var callbackUrl = $"/auth/signin-callback?token={loginToken}&returnUrl={Uri.EscapeDataString(target)}";
+            
+            Nav.NavigateTo(callbackUrl, forceLoad: true);
+        }
+        else
+        {
+            Snackbar.Add(result.FirstError, Severity.Error);
+        }
+    }
+}

@@ -1,0 +1,116 @@
+@page "/client/plans"
+@layout Layout.ClientLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Client")]
+
+@using SportClub.Application.DTOs
+@using SportClub.Application.Interfaces
+@using SportClub.Domain
+
+@inject IPlanService PlanService
+@inject NavigationManager Nav
+
+<PageTitle>Тарифи — SportClub</PageTitle>
+
+<MudText Typo="Typo.h5" Style="font-weight:700;" Class="mb-1">Каталог тарифів</MudText>
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">Оберіть абонемент для продовження тренувань</MudText>
+
+@if (_isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mt-4" />
+}
+else if (!_plans.Any())
+{
+    <MudAlert Severity="Severity.Info">Тарифи наразі недоступні.</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var (plan, index) in _plans.Select((p, i) => (p, i)))
+        {
+            bool isPopular = index == 1; // Другий тариф — найпопулярніший
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="@(isPopular ? 4 : 1)"
+                          Style="@GetCardStyle(isPopular)"
+                          Class="d-flex flex-column pa-4 rounded-xl">
+                    @if (isPopular)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Class="align-self-start mb-2">
+                            ⭐ Найпопулярніший
+                        </MudChip>
+                    }
+                    
+                    <MudText Typo="Typo.h6" Style="font-weight:700; margin-bottom:4px;">@plan.Name</MudText>
+                    
+                    @if (!string.IsNullOrEmpty(plan.Description))
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3" Style="flex-grow:1; line-height:1.5;">
+                            @plan.Description
+                        </MudText>
+                    }
+                    else
+                    {
+                        <div style="flex-grow:1;"></div>
+                    }
+
+                    <div class="d-flex align-baseline gap-1 my-3">
+                        <MudText Typo="Typo.h4" Style="font-weight:800; color:#1E1B4B;">@plan.Price.ToString("N0")</MudText>
+                        <MudText Typo="Typo.body1" Color="Color.Secondary">грн</MudText>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2 mb-4">
+                        @{
+                            var durationLabel = plan.DurationUnit == PlanDurationUnit.Months
+                                ? $"{plan.DurationValue} міс."
+                                : $"{plan.DurationValue} дн.";
+                        }
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">
+                            <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                            @durationLabel
+                        </MudChip>
+                        @if (plan.PlanType == PlanType.LimitedVisits && plan.MaxVisits.HasValue)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">
+                                <MudIcon Icon="@Icons.Material.Filled.FitnessCenter" Size="Size.Small" Class="mr-1" />
+                                @plan.MaxVisits відвідувань
+                            </MudChip>
+                        }
+                    </div>
+
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               FullWidth="true"
+                               Style="border-radius:12px; font-weight:600; padding:10px;"
+                               OnClick="@(() => HandleBuyClick(plan.Id))">
+                        Придбати
+                    </MudButton>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private bool _isLoading = true;
+    private IReadOnlyList<PlanDto> _plans = Array.Empty<PlanDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var result = await PlanService.GetAllAsync();
+        if (result.IsSuccess)
+        {
+            _plans = result.Value!.Where(p => !p.IsArchived).ToList();
+        }
+        _isLoading = false;
+    }
+
+    private void HandleBuyClick(int planId)
+    {
+        Nav.NavigateTo($"/client/checkout/{planId}");
+    }
+
+    private static string GetCardStyle(bool isPopular) =>
+        isPopular 
+            ? "border: 2px solid #6C63FF; background: #F4F6FB;" 
+            : "border: 1px solid #E5E7EB; background: white;";
+}

@@ -1,23 +1,275 @@
 @page "/"
-@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@layout SportClub.Components.Layout.PublicLayout
 @rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@using SportClub.Application.DTOs
+@using SportClub.Application.Interfaces
+@using SportClub.Domain
+@using System.Security.Claims
 
+@inject IPlanService PlanService
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthState
 
+<PageTitle>SportClub — Ваш спортивний клуб</PageTitle>
+
+<!-- HERO SECTION -->
+<div style="background:linear-gradient(135deg, #1E1B4B 0%, #6C63FF 60%, #4FACFE 100%);
+            min-height:520px; display:flex; align-items:center; justify-content:center;
+            flex-direction:column; text-align:center; padding:100px 24px 80px; position:relative; overflow:hidden;">
+    <!-- Декоративні кола -->
+    <div style="position:absolute; width:400px; height:400px; border-radius:50%;
+                background:rgba(255,255,255,0.05); top:-100px; right:-100px;"></div>
+    <div style="position:absolute; width:250px; height:250px; border-radius:50%;
+                background:rgba(255,255,255,0.05); bottom:-50px; left:-50px;"></div>
+
+    <MudText Typo="Typo.h1" Style="color:white; font-weight:900; letter-spacing:-2px; z-index:1; max-width:800px; line-height:1.1;">
+        Зміни себе вже
+        <span style="background:linear-gradient(90deg,#FFD700,#FF6584); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
+            сьогодні
+        </span>
+    </MudText>
+    <MudText Typo="Typo.h5" Style="color:rgba(255,255,255,0.8); margin-top:24px; font-weight:400; z-index:1; max-width:600px; line-height:1.5;">
+        Спортивний клуб «Імпульс» — твій простір сили та енергії. Найкращі тренажери, професійні тренери та ком'юніті однодумців.
+    </MudText>
+    <div style="margin-top:36px; display:flex; gap:12px; flex-wrap:wrap; justify-content:center; z-index:1;">
+        <MudButton Href="#plans" Variant="Variant.Filled"
+                   Style="background:#FFD700; color:#1E1B4B; font-weight:700; border-radius:24px;
+                          padding:12px 32px; font-size:1rem; box-shadow:0 4px 20px rgba(255,215,0,0.4);">
+            Обрати тариф
+        </MudButton>
+        <MudButton Href="/login" Variant="Variant.Outlined"
+                   Style="border-color:white; color:white; font-weight:600; border-radius:24px; padding:12px 32px; font-size:1rem;">
+            Увійти в кабінет
+        </MudButton>
+    </div>
+
+    <!-- Статистика -->
+    <div style="display:flex; gap:48px; margin-top:56px; z-index:1; flex-wrap:wrap; justify-content:center;">
+        @foreach (var stat in _stats)
+        {
+            <div style="text-align:center;">
+                <MudText Typo="Typo.h4" Style="color:white; font-weight:800;">@stat.Value</MudText>
+                <MudText Typo="Typo.body2" Style="color:rgba(255,255,255,0.6);">@stat.Label</MudText>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- ПЕРЕВАГИ -->
+<div style="max-width:1100px; margin:0 auto; padding:80px 24px;">
+    <MudText Typo="Typo.h4" Align="Align.Center" Style="font-weight:700; color:#1E1B4B; margin-bottom:8px;">
+        Чому обирають нас
+    </MudText>
+    <MudText Typo="Typo.body1" Align="Align.Center" Style="color:#6B7280; margin-bottom:48px;">
+        Ми пропонуємо найкращі умови для вашого тренування
+    </MudText>
+    <MudGrid>
+        @foreach (var feature in _features)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Elevation="0" Style="border-radius:16px; padding:32px 24px; text-align:center;
+                           border:1px solid #E5E7EB; transition:all 0.2s;
+                           background:white;">
+                    <div style="width:56px; height:56px; border-radius:16px; background:linear-gradient(135deg,#6C63FF,#4FACFE);
+                                display:flex; align-items:center; justify-content:center; margin:0 auto 16px;">
+                        <MudIcon Icon="@feature.Icon" Style="color:white; font-size:28px;" />
+                    </div>
+                    <MudText Typo="Typo.h6" Style="font-weight:700; margin-bottom:8px; color:#1E1B4B;">@feature.Title</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#6B7280; line-height:1.6;">@feature.Description</MudText>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+</div>
+
+<!-- ТАРИФИ -->
+<div id="plans" style="background:linear-gradient(180deg, #F4F6FB 0%, #EEF0FF 100%); padding:80px 24px;">
+    <div style="max-width:1100px; margin:0 auto;">
+        <MudText Typo="Typo.h4" Align="Align.Center" Style="font-weight:700; color:#1E1B4B; margin-bottom:8px;">
+            Наші тарифи
+        </MudText>
+        <MudText Typo="Typo.body1" Align="Align.Center" Style="color:#6B7280; margin-bottom:48px;">
+            Оберіть зручний варіант та придбайте онлайн просто зараз
+        </MudText>
+
+        @if (_isLoading)
+        {
+            <MudGrid>
+                @for (int i = 0; i < 3; i++)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Style="border-radius:20px;" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+        else if (!_plans.Any())
+        {
+            <MudAlert Severity="Severity.Info" Class="mx-auto" Style="max-width:500px;">Тарифи наразі недоступні.</MudAlert>
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var (plan, index) in _plans.Select((p, i) => (p, i)))
+                {
+                    bool isPopular = index == 1; // Другий тариф — найпопулярніший
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Elevation="@(isPopular ? 6 : 1)"
+                                  Style="@GetCardStyle(isPopular)"
+                                  Class="d-flex flex-column">
+                            @if (isPopular)
+                            {
+                                <div style="background:linear-gradient(90deg,#FFD700,#FF6584);
+                                            padding:6px 16px; border-radius:12px 12px 0 0;
+                                            text-align:center; margin:-24px -24px 20px -24px;">
+                                    <MudText Typo="Typo.caption" Style="color:#1E1B4B; font-weight:700; letter-spacing:1px; text-transform:uppercase;">
+                                        ⭐ Найпопулярніший
+                                    </MudText>
+                                </div>
+                            }
+                            <MudText Typo="Typo.h6" Style="@($"font-weight:700; margin-bottom:8px; color:{(isPopular ? "white" : "#1E1B4B")};")">
+                                @plan.Name
+                            </MudText>
+                            @if (!string.IsNullOrEmpty(plan.Description))
+                            {
+                                <MudText Typo="Typo.body2" Style="@($"color:{(isPopular ? "rgba(255,255,255,0.7)" : "#6B7280")}; margin-bottom:16px; flex-grow:1; line-height:1.6;")">
+                                    @plan.Description
+                                </MudText>
+                            }
+                            else
+                            {
+                                <div style="flex-grow:1;"></div>
+                            }
+
+                            <div style="margin:16px 0; display:flex; align-items:baseline; gap:4px;">
+                                <MudText Typo="Typo.h3" Style="@($"font-weight:800; color:{(isPopular ? "white" : "#6C63FF")};")">
+                                    @plan.Price.ToString("N0")
+                                </MudText>
+                                <MudText Typo="Typo.h6" Style="@($"color:{(isPopular ? "rgba(255,255,255,0.7)" : "#6B7280")};")">грн</MudText>
+                            </div>
+
+                            <div style="margin-bottom:20px;">
+                                @{
+                                    var durationLabel = plan.DurationUnit == PlanDurationUnit.Months
+                                        ? $"{plan.DurationValue} міс."
+                                        : $"{plan.DurationValue} дн.";
+                                }
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                         Style="@($"border-color:{(isPopular ? "rgba(255,255,255,0.4)" : "#E5E7EB")}; color:{(isPopular ? "white" : "#6B7280")};")">
+                                    <MudIcon Icon="@Icons.Material.Filled.AccessTime" Size="Size.Small" Class="mr-1" />
+                                    @durationLabel
+                                </MudChip>
+                                @if (plan.PlanType == PlanType.LimitedVisits && plan.MaxVisits.HasValue)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ml-1"
+                                             Style="@($"border-color:{(isPopular ? "rgba(255,255,255,0.4)" : "#E5E7EB")}; color:{(isPopular ? "white" : "#6B7280")};")">
+                                        <MudIcon Icon="@Icons.Material.Filled.FitnessCenter" Size="Size.Small" Class="mr-1" />
+                                        @plan.MaxVisits відвідувань
+                                    </MudChip>
+                                }
+                            </div>
+
+                            <MudButton Variant="Variant.Filled" FullWidth="true"
+                                       Style="@GetButtonStyle(isPopular)"
+                                       OnClick="@(() => HandleBuyClick(plan.Id))">
+                                Придбати онлайн
+                            </MudButton>
+
+                            @if (isPopular)
+                            {
+                                <MudText Typo="Typo.caption" Align="Align.Center" Style="color:rgba(255,255,255,0.6); margin-top:8px;">
+                                    + 5% кешбек бонусами
+                                </MudText>
+                            }
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </div>
+</div>
+
+
+
 @code {
+    private bool _isLoading = true;
+    private IReadOnlyList<PlanDto> _plans = Array.Empty<PlanDto>();
+
+    private record Stat(string Value, string Label);
+    private record Feature(string Icon, string Title, string Description);
+
+    private readonly List<Stat> _stats = new()
+    {
+        new("500+", "Активних членів"),
+        new("15+", "Тренерів"),
+        new("50+", "Занять на тиждень")
+    };
+
+    private readonly List<Feature> _features = new()
+    {
+        new(Icons.Material.Filled.FitnessCenter, "Сучасне обладнання",
+            "Тренажерний зал оснащений найсучаснішим обладнанням від провідних виробників."),
+        new(Icons.Material.Filled.People, "Групові заняття",
+            "Понад 20 видів групових занять: йога, пілатес, функціональний тренінг, бокс та інше."),
+        new(Icons.Material.Filled.Schedule, "Зручний розклад",
+            "Заняття щодня з 7:00 до 22:00. Записуйтесь онлайн у зручний для вас час."),
+        new(Icons.Material.Filled.Star, "Профі тренери",
+            "Всі наші тренери мають міжнародні сертифікати та багаторічний досвід."),
+        new(Icons.Material.Filled.CreditCard, "Онлайн оплата",
+            "Безпечна оплата через Monobank. Миттєво — без черг та зайвих кліків."),
+        new(Icons.Material.Filled.CardGiftcard, "Кешбек 5%",
+            "Повертаємо 5% бонусами за кожну покупку абонемента. Накопичуйте — економте.")
+    };
+
     protected override async Task OnInitializedAsync()
     {
+        // Якщо вже авторизований — перенаправляємо одразу
         var state = await AuthState.GetAuthenticationStateAsync();
-        var role = state.User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
-
-        var target = role switch
+        if (state.User.Identity?.IsAuthenticated == true)
         {
-            "Admin" or "Receptionist" => "/admin",
-            "Client" => "/client",
-            _ => "/login"
-        };
+            var role = state.User.FindFirst(ClaimTypes.Role)?.Value;
+            var target = role switch
+            {
+                "Admin" or "Receptionist" => "/admin",
+                "Client" => "/client",
+                _ => null
+            };
+            if (target is not null)
+            {
+                Nav.NavigateTo(target, forceLoad: false);
+                return;
+            }
+        }
 
-        Nav.NavigateTo(target, forceLoad: true);
+        var result = await PlanService.GetAllAsync();
+        if (result.IsSuccess)
+            _plans = result.Value!.Where(p => !p.IsArchived).ToList();
+
+        _isLoading = false;
     }
+
+    private async Task HandleBuyClick(int planId)
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        if (state.User.Identity?.IsAuthenticated == true)
+        {
+            Nav.NavigateTo($"/client/checkout/{planId}");
+        }
+        else
+        {
+            Nav.NavigateTo($"/auth?ReturnUrl=/client/checkout/{planId}");
+        }
+    }
+
+    private static string GetCardStyle(bool isPopular) =>
+        isPopular
+            ? "border-radius:20px; padding:24px; display:flex; flex-direction:column; height:100%;" +
+              "background:linear-gradient(135deg,#6C63FF,#4FACFE); box-shadow:0 20px 60px rgba(108,99,255,0.35);"
+            : "border-radius:20px; padding:24px; display:flex; flex-direction:column; height:100%;" +
+              "background:white; border:1px solid #E5E7EB;";
+
+    private static string GetButtonStyle(bool isPopular) =>
+        isPopular
+            ? "border-radius:12px; background:white; color:#6C63FF; font-weight:700; padding:12px;"
+            : "border-radius:12px; background:linear-gradient(135deg,#6C63FF,#4FACFE); color:white; font-weight:700; padding:12px;";
 }

@@ -210,6 +210,7 @@ public sealed class ClientProfileService : IClientProfileService
             cp.DateOfBirth,
             cp.Notes,
             cp.IsBlocked,
+            cp.BonusBalance,
             cp.CreatedAt,
             cp.Subscriptions
                 .OrderByDescending(s => s.PurchaseDate)
@@ -238,5 +239,6 @@ public sealed class ClientProfileService : IClientProfileService
             s.FrozenDaysUsed,
             s.FrozenSince,
             s.VisitsUsed,
-            s.IsActive);
+            s.IsActive,
+            s.FinalPrice);
 }

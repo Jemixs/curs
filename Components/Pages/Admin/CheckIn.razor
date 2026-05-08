@@ -136,12 +136,16 @@
     private CheckInResultDto? _lastResult;
     private List<CheckInHistoryItemDto> _todayList = new();
 
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadToday();
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
             await JS.InvokeVoidAsync("clubInterop.focusElement", "#barcode-input");
-            await LoadToday();
         }
     }
 
@@ -181,7 +185,10 @@
     {
         var result = await CheckInService.GetTodayAsync();
         if (result.IsSuccess)
+        {
             _todayList = result.Value!.ToList();
+            StateHasChanged();
+        }
     }
 
     private static string GetResultColor(CheckInResult status) => status switch

@@ -148,21 +148,23 @@ public sealed class CheckInService : ICheckInService
 
     public async Task<Result<IReadOnlyList<CheckInHistoryItemDto>>> GetTodayAsync(CancellationToken ct = default)
     {
+        // Використовуємо 24-годинне вікно від початку поточної доби UTC
         var todayStart = DateTime.UtcNow.Date;
+        var nextDay = todayStart.AddDays(1);
 
         var items = await _db.CheckIns
             .Include(ci => ci.Subscription)
                 .ThenInclude(s => s.Plan)
             .Include(ci => ci.ClientProfile)
                 .ThenInclude(cp => cp.User)
-            .Where(ci => ci.CheckedInAt >= todayStart)
+            .Where(ci => ci.CheckedInAt >= todayStart && ci.CheckedInAt < nextDay)
             .OrderByDescending(ci => ci.CheckedInAt)
             .AsNoTracking()
             .Select(ci => new CheckInHistoryItemDto(
                 ci.Id,
                 ci.CheckedInAt,
                 ci.Subscription.Plan.Name,
-                ci.ClientProfile.User.FullName))
+                $"{ci.ClientProfile.User.FullName} ({ci.BarcodeSnapshot})"))
             .ToListAsync(ct);
 
         return Result<IReadOnlyList<CheckInHistoryItemDto>>.Ok(items);

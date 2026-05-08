@@ -1,0 +1,358 @@
+@page "/admin/schedule"
+@layout SportClub.Components.Layout.AdminLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using SportClub.Application.DTOs
+@using SportClub.Application.Interfaces
+@using SportClub.Domain
+@attribute [Authorize(Roles = "Admin,Receptionist")]
+
+@inject IBookingService BookingService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h4" Class="mb-6" Style="font-weight:700; color:#1E1B4B;">Розклад та Групові заняття</MudText>
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-6">
+    <MudTabPanel Text="Поточний Розклад">
+        <div class="d-flex justify-space-between align-center mb-4">
+            <MudText Typo="Typo.h6">Найближчі 7 днів</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenCreateSessionDialog">Створити заняття</MudButton>
+        </div>
+
+        @if (_isLoading)
+        {
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        }
+        else if (!_sessions.Any())
+        {
+            <MudAlert Severity="Severity.Info">Немає запланованих занять на найближчі 7 днів.</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="_sessions" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Дата та Час</MudTh>
+                    <MudTh>Назва</MudTh>
+                    <MudTh>Тренер</MudTh>
+                    <MudTh>Місця</MudTh>
+                    <MudTh>Статус</MudTh>
+                    <MudTh>Дії</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Дата та Час">@context.StartTime.ToString("dd.MM.yyyy HH:mm") - @context.EndTime.ToString("HH:mm")</MudTd>
+                    <MudTd DataLabel="Назва"><b>@context.Title</b></MudTd>
+                    <MudTd DataLabel="Тренер">@context.Trainer.FullName (@context.Trainer.Specialization)</MudTd>
+                    <MudTd DataLabel="Місця">
+                        <MudProgressLinear Color="@GetCapacityColor(context)" Value="@GetCapacityPercentage(context)" Class="mb-1" />
+                        <MudText Typo="Typo.caption">@context.CurrentParticipants / @context.MaxParticipants</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Статус">
+                        @if (context.IsCancelled)
+                        {
+                            <MudChip T="string" Color="Color.Error" Size="Size.Small">Скасовано</MudChip>
+                        }
+                        else if (context.StartTime < DateTime.UtcNow)
+                        {
+                            <MudChip T="string" Color="Color.Default" Size="Size.Small">Завершено</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Активно</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Дії">
+                        <MudIconButton Icon="@Icons.Material.Filled.People" Color="Color.Info" Size="Size.Small" OnClick="@(() => ShowBookings(context))" />
+                        @if (!context.IsCancelled && context.StartTime > DateTime.UtcNow)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" OnClick="@(() => CancelSession(context.Id))" />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <MudTabPanel Text="Тренери">
+        <div class="d-flex justify-space-between align-center mb-4">
+            <MudText Typo="Typo.h6">Управління тренерами</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="ToggleCreateTrainer">Додати тренера</MudButton>
+        </div>
+
+        @if (_showCreateTrainer)
+        {
+            <MudCard Elevation="1" Class="mb-4 pa-4" Style="background:#F9FAFB;">
+                <MudGrid>
+                    <MudItem xs="12" sm="5">
+                        <MudTextField @bind-Value="_newTrainerFullName" Label="ПІБ Тренера" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="5">
+                        <MudTextField @bind-Value="_newTrainerSpecialization" Label="Спеціалізація" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="2" Class="d-flex align-center">
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="CreateTrainer" FullWidth="true">Зберегти</MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudCard>
+        }
+
+        <MudTable Items="_trainers" Hover="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>ID</MudTh>
+                <MudTh>ПІБ</MudTh>
+                <MudTh>Спеціалізація</MudTh>
+                <MudTh>Статус</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Id</MudTd>
+                <MudTd><b>@context.FullName</b></MudTd>
+                <MudTd>@context.Specialization</MudTd>
+                <MudTd>
+                    @if (context.IsActive)
+                    {
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small">Активний</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Default" Size="Size.Small">Неактивний</MudChip>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    </MudTabPanel>
+</MudTabs>
+
+@* Діалог створення заняття *@
+<MudDialog @bind-Visible="_createSessionDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Створити групове заняття</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_newSessionTitle" Label="Назва заняття" Variant="Variant.Outlined" Class="mb-3" />
+        
+        <MudSelect T="int" @bind-Value="_newSessionTrainerId" Label="Тренер" Variant="Variant.Outlined" Class="mb-3">
+            <MudSelectItem T="int" Value="0">Оберіть тренера</MudSelectItem>
+            @foreach (var trainer in _trainers.Where(t => t.IsActive))
+            {
+                <MudSelectItem T="int" Value="@trainer.Id">@trainer.FullName</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudGrid>
+            <MudItem xs="6">
+                <MudDatePicker @bind-Date="_newSessionDate" Label="Дата" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudTimePicker @bind-Time="_newSessionStartTime" Label="Час початку" Variant="Variant.Outlined" />
+            </MudItem>
+        </MudGrid>
+
+        <MudNumericField @bind-Value="_newSessionDurationMinutes" Label="Тривалість (хвилин)" Variant="Variant.Outlined" Min="15" Max="180" Class="mt-3" />
+        <MudNumericField @bind-Value="_newSessionMaxParticipants" Label="Макс. кількість місць" Variant="Variant.Outlined" Min="1" Max="100" Class="mt-3 mb-2" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseCreateSessionDialog">Скасувати</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="CreateSession">Створити</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Діалог перегляду записів *@
+<MudDialog @bind-Visible="_bookingsDialogVisible" Options="_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Записи на заняття</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_sessionBookings == null || !_sessionBookings.Any())
+        {
+            <MudText>Поки що ніхто не записався на це заняття.</MudText>
+        }
+        else
+        {
+            <MudTable Items="_sessionBookings" Hover="true" Elevation="0">
+                <HeaderContent>
+                    <MudTh>Клієнт</MudTh>
+                    <MudTh>Баркод</MudTh>
+                    <MudTh>Час бронювання</MudTh>
+                    <MudTh>Статус</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.ClientFullName</MudTd>
+                    <MudTd>@context.ClientBarcode</MudTd>
+                    <MudTd>@context.BookingTime.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+                    <MudTd>
+                        @if (context.Status == "Active")
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Активно</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Color="Color.Error" Size="Size.Small">Скасовано</MudChip>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseBookingsDialog">Закрити</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private bool _isLoading = true;
+    private IReadOnlyList<ClassSessionDto> _sessions = Array.Empty<ClassSessionDto>();
+    private IReadOnlyList<TrainerDto> _trainers = Array.Empty<TrainerDto>();
+    
+    private bool _showCreateTrainer = false;
+    private string _newTrainerFullName = "";
+    private string _newTrainerSpecialization = "";
+
+    // Create session dialog
+    private bool _createSessionDialogVisible = false;
+    private DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+    
+    private string _newSessionTitle = "";
+    private int _newSessionMaxParticipants = 15;
+    private int _newSessionTrainerId = 0;
+    private DateTime? _newSessionDate = DateTime.Today;
+    private TimeSpan? _newSessionStartTime = new TimeSpan(10, 0, 0);
+    private int _newSessionDurationMinutes = 60;
+
+    // Bookings dialog
+    private bool _bookingsDialogVisible = false;
+    private IReadOnlyList<ClassBookingDto> _sessionBookings = Array.Empty<ClassBookingDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        
+        var sessionsResult = await BookingService.GetUpcomingSessionsAsync();
+        if (sessionsResult.IsSuccess)
+            _sessions = sessionsResult.Value!;
+            
+        var trainersResult = await BookingService.GetTrainersAsync();
+        if (trainersResult.IsSuccess)
+            _trainers = trainersResult.Value!;
+
+        _isLoading = false;
+    }
+
+    private int GetCapacityPercentage(ClassSessionDto s) => s.MaxParticipants == 0 ? 0 : (s.CurrentParticipants * 100) / s.MaxParticipants;
+    private Color GetCapacityColor(ClassSessionDto s)
+    {
+        var pct = GetCapacityPercentage(s);
+        if (pct >= 100) return Color.Error;
+        if (pct >= 80) return Color.Warning;
+        return Color.Success;
+    }
+
+    private void ToggleCreateTrainer() => _showCreateTrainer = !_showCreateTrainer;
+
+    private async Task CreateTrainer()
+    {
+        if (string.IsNullOrWhiteSpace(_newTrainerFullName))
+        {
+            Snackbar.Add("Введіть ПІБ тренера", Severity.Warning);
+            return;
+        }
+
+        var dto = new CreateTrainerDto(_newTrainerFullName, _newTrainerSpecialization);
+        var res = await BookingService.CreateTrainerAsync(dto);
+        if (res.IsSuccess)
+        {
+            Snackbar.Add("Тренера додано", Severity.Success);
+            _newTrainerFullName = "";
+            _newTrainerSpecialization = "";
+            _showCreateTrainer = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(res.FirstError, Severity.Error);
+        }
+    }
+
+    private void OpenCreateSessionDialog()
+    {
+        _newSessionTitle = "";
+        _newSessionMaxParticipants = 15;
+        _newSessionTrainerId = 0;
+        _newSessionDate = DateTime.Today.AddDays(1);
+        _newSessionStartTime = new TimeSpan(10, 0, 0);
+        _newSessionDurationMinutes = 60;
+        _createSessionDialogVisible = true;
+    }
+
+    private void CloseCreateSessionDialog() => _createSessionDialogVisible = false;
+
+    private async Task CreateSession()
+    {
+        if (_newSessionTrainerId == 0)
+        {
+            Snackbar.Add("Оберіть тренера", Severity.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_newSessionTitle))
+        {
+            Snackbar.Add("Введіть назву", Severity.Warning);
+            return;
+        }
+
+        var startDateTime = _newSessionDate!.Value.Date + _newSessionStartTime!.Value;
+        var endDateTime = startDateTime.AddMinutes(_newSessionDurationMinutes);
+
+        var dto = new CreateClassSessionDto(
+            _newSessionTitle,
+            _newSessionTrainerId,
+            startDateTime.ToUniversalTime(),
+            endDateTime.ToUniversalTime(),
+            _newSessionMaxParticipants
+        );
+
+        var res = await BookingService.CreateSessionAsync(dto);
+        if (res.IsSuccess)
+        {
+            Snackbar.Add("Заняття успішно створено", Severity.Success);
+            _createSessionDialogVisible = false;
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(res.FirstError, Severity.Error);
+        }
+    }
+
+    private async Task CancelSession(int id)
+    {
+        var res = await BookingService.CancelSessionAsync(id);
+        if (res.IsSuccess)
+        {
+            Snackbar.Add("Заняття скасовано", Severity.Success);
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(res.FirstError, Severity.Error);
+        }
+    }
+
+    private async Task ShowBookings(ClassSessionDto session)
+    {
+        var res = await BookingService.GetSessionBookingsAsync(session.Id);
+        if (res.IsSuccess)
+        {
+            _sessionBookings = res.Value!;
+            _bookingsDialogVisible = true;
+        }
+        else
+        {
+            Snackbar.Add(res.FirstError, Severity.Error);
+        }
+    }
+
+    private void CloseBookingsDialog() => _bookingsDialogVisible = false;
+}

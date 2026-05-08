@@ -1,0 +1,83 @@
+@inherits LayoutComponentBase
+@inject NavigationManager Nav
+
+<MudThemeProvider Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Style="background:rgba(255,255,255,0.95); backdrop-filter:blur(12px);" Dense="false">
+        <MudText Typo="Typo.h5" Style="font-weight:900; color:#1E1B4B; letter-spacing:-0.5px; cursor:pointer;" @onclick='() => Nav.NavigateTo("/")'>
+            <span style="color:#6C63FF;">⚡</span> ІМПУЛЬС
+        </MudText>
+        <MudSpacer />
+        <div class="d-none d-md-flex gap-4 mr-6">
+            <MudButton Href="/" Variant="Variant.Text" Style="color:#1E1B4B; font-weight:600;">Головна</MudButton>
+            <MudButton Href="/#plans" Variant="Variant.Text" Style="color:#1E1B4B; font-weight:600;">Тарифи</MudButton>
+            <MudButton Href="/#schedule" Variant="Variant.Text" Style="color:#1E1B4B; font-weight:600;">Розклад</MudButton>
+        </div>
+        <MudButton Href="/auth" Variant="Variant.Filled" Color="Color.Primary" Style="border-radius:24px; font-weight:700; padding:8px 24px;">
+            Особистий кабінет
+        </MudButton>
+    </MudAppBar>
+
+    <MudMainContent Style="background:#F4F6FB; min-height:100vh; padding-top:64px; display:flex; flex-direction:column;">
+        <div style="flex:1;">
+            @Body
+        </div>
+
+        <!-- FOOTER -->
+        <div style="background:#111827; padding:60px 24px; color:white; margin-top:auto;">
+            <MudGrid Class="mx-auto" Style="max-width:1200px;">
+                <MudItem xs="12" md="4">
+                    <MudText Typo="Typo.h5" Style="font-weight:900; margin-bottom:16px;">
+                        <span style="color:#6C63FF;">⚡</span> ІМПУЛЬС
+                    </MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9CA3AF; line-height:1.6; max-width:300px;">
+                        Сучасний спортивний простір для тих, хто прагне більшого. Тренуйся з кращими!
+                    </MudText>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudText Typo="Typo.h6" Style="font-weight:700; margin-bottom:16px;">Контакти</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9CA3AF; margin-bottom:8px;">
+                        <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" Class="mr-2" /> вул. Спортивна, 10, Київ
+                    </MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9CA3AF; margin-bottom:8px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mr-2" /> +380 (50) 123-45-67
+                    </MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9CA3AF;">
+                        <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Class="mr-2" /> hello@impulse-club.ua
+                    </MudText>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudText Typo="Typo.h6" Style="font-weight:700; margin-bottom:16px;">Години роботи</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9CA3AF; margin-bottom:8px;">Пн - Пт: 07:00 - 22:00</MudText>
+                    <MudText Typo="Typo.body2" Style="color:#9CA3AF;">Сб - Нд: 08:00 - 20:00</MudText>
+                </MudItem>
+            </MudGrid>
+            <MudDivider Class="my-8" Style="background:rgba(255,255,255,0.1);" />
+            <MudText Typo="Typo.body2" Align="Align.Center" Style="color:#6B7280;">
+                © @DateTime.Now.Year Спортивний клуб «Імпульс». Всі права захищено.
+            </MudText>
+        </div>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#6C63FF",
+            PrimaryDarken = "#5A52E0",
+            Secondary = "#FF6584",
+            Background = "#F4F6FB",
+            Surface = "#FFFFFF",
+            AppbarBackground = "#FFFFFF",
+            AppbarText = "#1E1B4B",
+            TextPrimary = "#1E1B4B",
+            TextSecondary = "#6B7280"
+        }
+    };
+}

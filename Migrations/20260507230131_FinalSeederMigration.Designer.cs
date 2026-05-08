@@ -2,17 +2,20 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SportClub.Data;
 
 #nullable disable
 
-namespace SportClub.Data.Migrations
+namespace SportClub.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260507230131_FinalSeederMigration")]
+    partial class FinalSeederMigration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.10");
@@ -49,6 +52,76 @@ namespace SportClub.Data.Migrations
                     b.ToTable("CheckIns", (string)null);
                 });
 
+            modelBuilder.Entity("SportClub.Domain.ClassBooking", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("BookingTime")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
+
+                    b.Property<int>("ClientProfileId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SessionId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientProfileId");
+
+                    b.HasIndex("SessionId", "ClientProfileId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ClassBookings_Session_Client");
+
+                    b.ToTable("ClassBookings", (string)null);
+                });
+
+            modelBuilder.Entity("SportClub.Domain.ClassSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MaxParticipants")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TrainerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TrainerId");
+
+                    b.ToTable("ClassSessions", (string)null);
+                });
+
             modelBuilder.Entity("SportClub.Domain.ClientProfile", b =>
                 {
                     b.Property<int>("Id")
@@ -59,6 +132,11 @@ namespace SportClub.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(128)
                         .HasColumnType("TEXT");
+
+                    b.Property<decimal>("BonusBalance")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(10,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -108,6 +186,7 @@ namespace SportClub.Data.Migrations
                         {
                             Id = 1,
                             Barcode = "SC-000001",
+                            BonusBalance = 0m,
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             DateOfBirth = new DateTime(1990, 5, 15, 0, 0, 0, 0, DateTimeKind.Utc),
                             IsBlocked = false,
@@ -216,6 +295,45 @@ namespace SportClub.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("SportClub.Domain.PromoCode", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CurrentUses")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DiscountPercentage")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ExpiryDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("MaxUses")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PromoCodes_Code");
+
+                    b.ToTable("PromoCodes", (string)null);
+                });
+
             modelBuilder.Entity("SportClub.Domain.Subscription", b =>
                 {
                     b.Property<int>("Id")
@@ -236,6 +354,11 @@ namespace SportClub.Data.Migrations
                     b.Property<DateTime?>("ExpirationDate")
                         .HasColumnType("TEXT");
 
+                    b.Property<decimal>("FinalPrice")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(10,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<int>("FrozenDaysUsed")
                         .HasColumnType("INTEGER");
 
@@ -253,6 +376,9 @@ namespace SportClub.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
+                    b.Property<string>("TransactionId")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("VisitsUsed")
                         .HasColumnType("INTEGER");
 
@@ -263,6 +389,30 @@ namespace SportClub.Data.Migrations
                     b.HasIndex("PlanId");
 
                     b.ToTable("Subscriptions", (string)null);
+                });
+
+            modelBuilder.Entity("SportClub.Domain.Trainer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FullName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Specialization")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Trainers", (string)null);
                 });
 
             modelBuilder.Entity("SportClub.Domain.User", b =>
@@ -287,7 +437,6 @@ namespace SportClub.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("PasswordHash")
-                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Role")
@@ -310,7 +459,7 @@ namespace SportClub.Data.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Email = "admin@sportclub.ua",
                             FullName = "Адміністратор",
-                            PasswordHash = "$2a$11$qcb/Xp9bOOGAtMPG3eHAjOyfUWMr/UFFqCbbcYsjI93Bfc7/R0ZZ6",
+                            PasswordHash = "$2a$11$lZaR85nu83EwV9eVmQF5AeEpUDLTwcSnynft5HyrQRU22qR59EIeS",
                             Role = "Admin"
                         },
                         new
@@ -319,7 +468,7 @@ namespace SportClub.Data.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Email = "reception@sportclub.ua",
                             FullName = "Рецепціоніст",
-                            PasswordHash = "$2a$11$Ys2odVm45GEouw5Qf654reScCNYd7JvboX2.U.wvEiZm/2f0VIGiy",
+                            PasswordHash = "$2a$11$TmM/AQzkz1q6hkHbuxomf.miTS9a/1yJRjIoMSnc2l4zTobkAXg6W",
                             Role = "Receptionist"
                         },
                         new
@@ -328,7 +477,7 @@ namespace SportClub.Data.Migrations
                             CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
                             Email = "client@sportclub.ua",
                             FullName = "Іван Петренко",
-                            PasswordHash = "$2a$11$0W7fs1YtMQZN82.hvJTVIub0ZBiF0.kF/MMRjqeuc2YTEZfznvrp.",
+                            PasswordHash = "$2a$11$JkZzKqbH7PUqNclagk3aXOBqQkhIPCxkbgYIeET7B6h.9cjrCBsym",
                             Role = "Client"
                         });
                 });
@@ -350,6 +499,36 @@ namespace SportClub.Data.Migrations
                     b.Navigation("ClientProfile");
 
                     b.Navigation("Subscription");
+                });
+
+            modelBuilder.Entity("SportClub.Domain.ClassBooking", b =>
+                {
+                    b.HasOne("SportClub.Domain.ClientProfile", "Client")
+                        .WithMany("ClassBookings")
+                        .HasForeignKey("ClientProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SportClub.Domain.ClassSession", "Session")
+                        .WithMany("Bookings")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Client");
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("SportClub.Domain.ClassSession", b =>
+                {
+                    b.HasOne("SportClub.Domain.Trainer", "Trainer")
+                        .WithMany("Sessions")
+                        .HasForeignKey("TrainerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Trainer");
                 });
 
             modelBuilder.Entity("SportClub.Domain.ClientProfile", b =>
@@ -382,9 +561,16 @@ namespace SportClub.Data.Migrations
                     b.Navigation("Plan");
                 });
 
+            modelBuilder.Entity("SportClub.Domain.ClassSession", b =>
+                {
+                    b.Navigation("Bookings");
+                });
+
             modelBuilder.Entity("SportClub.Domain.ClientProfile", b =>
                 {
                     b.Navigation("CheckIns");
+
+                    b.Navigation("ClassBookings");
 
                     b.Navigation("Subscriptions");
                 });
@@ -397,6 +583,11 @@ namespace SportClub.Data.Migrations
             modelBuilder.Entity("SportClub.Domain.Subscription", b =>
                 {
                     b.Navigation("CheckIns");
+                });
+
+            modelBuilder.Entity("SportClub.Domain.Trainer", b =>
+                {
+                    b.Navigation("Sessions");
                 });
 
             modelBuilder.Entity("SportClub.Domain.User", b =>

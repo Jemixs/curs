@@ -36,6 +36,39 @@ public sealed class SubscriptionService : ISubscriptionService
         if (plan.IsArchived)
             return Result<SubscriptionDto>.Fail($"Тариф '{plan.Name}' архівовано і недоступний для продажу.");
 
+        decimal finalPrice = plan.Price;
+
+        // 1. Застосування промокоду
+        if (!string.IsNullOrWhiteSpace(dto.PromoCode))
+        {
+            var promo = await _db.PromoCodes
+                .FirstOrDefaultAsync(p => p.Code == dto.PromoCode.ToUpper(), ct);
+
+            if (promo is null || !promo.IsActive)
+                return Result<SubscriptionDto>.Fail("Недійсний промокод.");
+
+            if (promo.ExpiryDate.HasValue && promo.ExpiryDate.Value < DateTime.UtcNow)
+                return Result<SubscriptionDto>.Fail("Термін дії промокоду минув.");
+
+            if (promo.MaxUses.HasValue && promo.CurrentUses >= promo.MaxUses.Value)
+                return Result<SubscriptionDto>.Fail("Ліміт використання промокоду вичерпано.");
+
+            finalPrice -= finalPrice * (promo.DiscountPercentage / 100m);
+            promo.CurrentUses++;
+        }
+
+        // 2. Списання бонусів
+        if (dto.UseBonuses && client.BonusBalance > 0)
+        {
+            decimal bonusToUse = Math.Min(client.BonusBalance, finalPrice);
+            finalPrice -= bonusToUse;
+            client.BonusBalance -= bonusToUse;
+        }
+
+        // 3. Кешбек (5% від фінальної суми до оплати)
+        decimal cashback = finalPrice * 0.05m;
+        client.BonusBalance += cashback;
+
         var subscription = new Subscription
         {
             ClientProfileId = dto.ClientProfileId,
@@ -47,6 +80,7 @@ public sealed class SubscriptionService : ISubscriptionService
             FrozenDaysUsed = 0,
             FrozenSince = null,
             VisitsUsed = 0,
+            FinalPrice = finalPrice,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -79,7 +113,7 @@ public sealed class SubscriptionService : ISubscriptionService
             .ToListAsync(ct);
 
         var active = subscriptions
-            .Where(s => s.IsActive)
+            .Where(s => s.IsActive || s.IsFrozen)
             .OrderBy(s => s.ExpirationDate ?? DateTime.MaxValue)
             .FirstOrDefault();
 
@@ -88,8 +122,11 @@ public sealed class SubscriptionService : ISubscriptionService
             : Result<SubscriptionDto>.Ok(MapToDto(active));
     }
 
-    public async Task<Result> FreezeAsync(int subscriptionId, CancellationToken ct = default)
+    public async Task<Result> FreezeSubscriptionAsync(int subscriptionId, int daysToFreeze, CancellationToken ct = default)
     {
+        if (daysToFreeze <= 0)
+            return Result.Fail("Кількість днів для заморозки має бути більшою за нуль.");
+
         var subscription = await _db.Subscriptions
             .Include(s => s.Plan)
             .FirstOrDefaultAsync(s => s.Id == subscriptionId, ct);
@@ -108,13 +145,17 @@ public sealed class SubscriptionService : ISubscriptionService
 
         subscription.IsFrozen = true;
         subscription.FrozenSince = DateTime.UtcNow;
+        subscription.FrozenDaysUsed += daysToFreeze;
+
+        if (subscription.ExpirationDate.HasValue)
+            subscription.ExpirationDate = subscription.ExpirationDate.Value.AddDays(daysToFreeze);
 
         await _db.SaveChangesAsync(ct);
 
         return Result.Ok();
     }
 
-    public async Task<Result> UnfreezeAsync(int subscriptionId, CancellationToken ct = default)
+    public async Task<Result> UnfreezeSubscriptionAsync(int subscriptionId, CancellationToken ct = default)
     {
         var subscription = await _db.Subscriptions
             .Include(s => s.Plan)
@@ -126,17 +167,8 @@ public sealed class SubscriptionService : ISubscriptionService
         if (!subscription.IsFrozen)
             return Result.Fail("Абонемент не заморожено.");
 
-        if (subscription.FrozenSince is null)
-            return Result.Fail("Некоректний стан: заморожений абонемент без дати заморозки.");
-
-        var frozenDays = (int)(DateTime.UtcNow - subscription.FrozenSince.Value).TotalDays;
-
-        subscription.FrozenDaysUsed += frozenDays;
         subscription.IsFrozen = false;
         subscription.FrozenSince = null;
-
-        if (subscription.ExpirationDate.HasValue)
-            subscription.ExpirationDate = subscription.ExpirationDate.Value.AddDays(frozenDays);
 
         await _db.SaveChangesAsync(ct);
 
@@ -158,6 +190,60 @@ public sealed class SubscriptionService : ISubscriptionService
         await _db.SaveChangesAsync(ct);
 
         return Result.Ok();
+    }
+
+    public async Task<Result<SubscriptionDto>> BuySubscriptionOnlineAsync(BuyOnlineDto dto, CancellationToken ct = default)
+    {
+        var client = await _db.ClientProfiles
+            .FirstOrDefaultAsync(cp => cp.Id == dto.ClientProfileId, ct);
+
+        if (client is null)
+            return Result<SubscriptionDto>.Fail($"Клієнта з ID {dto.ClientProfileId} не знайдено.");
+
+        if (client.IsBlocked)
+            return Result<SubscriptionDto>.Fail("Неможливо продати абонемент заблокованому клієнту.");
+
+        var plan = await _db.Plans
+            .FirstOrDefaultAsync(p => p.Id == dto.PlanId, ct);
+
+        if (plan is null)
+            return Result<SubscriptionDto>.Fail($"Тариф з ID {dto.PlanId} не знайдено.");
+
+        if (plan.IsArchived)
+            return Result<SubscriptionDto>.Fail($"Тариф '{plan.Name}' архівовано.");
+
+        // Перевірка на дублювання: чи ця транзакція вже не була оброблена
+        var duplicate = await _db.Subscriptions
+            .AnyAsync(s => s.TransactionId == dto.TransactionId, ct);
+
+        if (duplicate)
+            return Result<SubscriptionDto>.Fail("Цю транзакцію вже оброблено. Повторне проведення платежу неможливе.");
+
+        // Нараховуємо кешбек 5% за онлайн-оплату
+        decimal cashback = plan.Price * 0.05m;
+        client.BonusBalance += cashback;
+
+        var subscription = new Subscription
+        {
+            ClientProfileId = dto.ClientProfileId,
+            PlanId = dto.PlanId,
+            PurchaseDate = DateTime.UtcNow,
+            FinalPrice = plan.Price,
+            TransactionId = dto.TransactionId,
+            ActivationDate = null,
+            ExpirationDate = null,
+            IsFrozen = false,
+            FrozenDaysUsed = 0,
+            FrozenSince = null,
+            VisitsUsed = 0,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _db.Subscriptions.Add(subscription);
+        await _db.SaveChangesAsync(ct);
+
+        subscription.Plan = plan;
+        return Result<SubscriptionDto>.Ok(MapToDto(subscription));
     }
 
     internal static SubscriptionDto MapToDto(Subscription s) =>
@@ -182,5 +268,7 @@ public sealed class SubscriptionService : ISubscriptionService
             s.FrozenDaysUsed,
             s.FrozenSince,
             s.VisitsUsed,
-            s.IsActive);
+            s.IsActive,
+            s.FinalPrice,
+            s.TransactionId);
 }

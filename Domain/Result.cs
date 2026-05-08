@@ -1,23 +1,14 @@
 namespace SportClub.Domain;
 
-// ─────────────────────────────────────────────────────────────
-//  Result<T>  —  standardised service response wrapper
-// ─────────────────────────────────────────────────────────────
+// Result<T> — обгортка для результатів роботи сервісів
 
-/// <summary>
-/// Represents the outcome of a service operation.
-/// <para>
-/// On success: <see cref="IsSuccess"/> is true and <see cref="Value"/> holds the result.
-/// On failure: <see cref="IsSuccess"/> is false and <see cref="Errors"/> contains user-facing messages.
-/// </para>
-/// </summary>
 public sealed class Result<T>
 {
     public bool IsSuccess { get; private init; }
     public T? Value { get; private init; }
     public IReadOnlyList<string> Errors { get; private init; } = Array.Empty<string>();
 
-    // ── Factory methods ──────────────────────────────────────
+    // Методи створення
 
     public static Result<T> Ok(T value) =>
         new() { IsSuccess = true, Value = value };
@@ -31,13 +22,12 @@ public sealed class Result<T>
     public static Result<T> Fail(Exception ex) =>
         Fail(ex.Message);
 
-    // ── Implicit conversion from value (syntactic sugar) ─────
+    // Неявне перетворення типів
     public static implicit operator Result<T>(T value) => Ok(value);
 
-    // ── Helpers ──────────────────────────────────────────────
+    // Допоміжні методи
     public string FirstError => Errors.Count > 0 ? Errors[0] : string.Empty;
 
-    /// <summary>Throws <see cref="InvalidOperationException"/> if the result is a failure.</summary>
     public T GetValueOrThrow() =>
         IsSuccess && Value is not null
             ? Value
@@ -47,9 +37,6 @@ public sealed class Result<T>
         IsSuccess ? $"Ok({Value})" : $"Fail([{string.Join(", ", Errors)}])";
 }
 
-/// <summary>
-/// Non-generic variant for operations that return no data (e.g., update, delete).
-/// </summary>
 public sealed class Result
 {
     public bool IsSuccess { get; private init; }

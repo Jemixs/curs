@@ -1,0 +1,434 @@
+@page "/client/checkout/{PlanId:int}"
+@layout SportClub.Components.Layout.PublicLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using SportClub.Application.DTOs
+@using SportClub.Application.Interfaces
+@using SportClub.Application.Services
+@using System.Security.Claims
+@attribute [Authorize(Roles = "Client")]
+
+@inject IPlanService PlanService
+@inject ISubscriptionService SubscriptionService
+@inject IClientProfileService ClientProfileService
+@inject IMonobankPaymentService PaymentService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthState
+
+@implements IDisposable
+
+<PageTitle>Оплата абонемента — SportClub</PageTitle>
+
+<div style="min-height:100vh; background:#0A0A0A; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="width:100%; max-width:420px;">
+
+        @if (_isInitializing)
+        {
+            <!-- Skeleton завантаження -->
+            <div style="text-align:center;">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+                <MudText Style="color:rgba(255,255,255,0.5); margin-top:16px;">Завантаження...</MudText>
+            </div>
+        }
+        else if (_plan == null)
+        {
+            <MudPaper Style="background:#1A1A1A; border-radius:20px; padding:32px; text-align:center;">
+                <MudIcon Icon="@Icons.Material.Filled.Error" Style="color:#FF6584; font-size:56px;" />
+                <MudText Typo="Typo.h6" Style="color:white; margin-top:16px;">Тариф не знайдено</MudText>
+                <MudButton Href="/" Variant="Variant.Text" Style="color:#6C63FF; margin-top:16px;">Повернутися</MudButton>
+            </MudPaper>
+        }
+        else if (_paymentState == PaymentState.Success)
+        {
+            <!-- УСПІХ -->
+            <div style="text-align:center; animation:fadeIn 0.5s ease;">
+                <div style="width:88px; height:88px; border-radius:50%;
+                            background:linear-gradient(135deg,#22C55E,#16A34A);
+                            display:flex; align-items:center; justify-content:center; margin:0 auto 24px;
+                            box-shadow:0 0 40px rgba(34,197,94,0.4);">
+                    <MudIcon Icon="@Icons.Material.Filled.Check" Style="color:white; font-size:48px;" />
+                </div>
+                <MudText Typo="Typo.h5" Style="color:white; font-weight:700; margin-bottom:8px;">
+                    Оплата успішна!
+                </MudText>
+                <MudText Style="color:rgba(255,255,255,0.55); margin-bottom:8px;">
+                    Абонемент <b style="color:white;">@_plan.Name</b> активовано
+                </MudText>
+                <MudText Style="color:rgba(255,255,255,0.35); font-size:0.8rem; margin-bottom:32px;">
+                    Transaction: @_paymentId
+                </MudText>
+                <div style="background:#1A1A1A; border-radius:16px; padding:20px; margin-bottom:24px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:12px;">
+                        <MudText Style="color:rgba(255,255,255,0.5);">Нараховано кешбек</MudText>
+                        <MudText Style="color:#22C55E; font-weight:700;">+@((_plan.Price * 0.05m).ToString("N2")) грн</MudText>
+                    </div>
+                    <div style="display:flex; justify-content:space-between;">
+                        <MudText Style="color:rgba(255,255,255,0.5);">Бонусний баланс</MudText>
+                        <MudText Style="color:#FFD700; font-weight:700;">оновлено ✓</MudText>
+                    </div>
+                </div>
+                <MudButton Variant="Variant.Filled" FullWidth="true"
+                           Style="background:linear-gradient(135deg,#6C63FF,#4FACFE); color:white;
+                                  border-radius:14px; padding:14px; font-weight:700; font-size:1rem;"
+                           OnClick="GoToDashboard">
+                    Перейти до кабінету
+                </MudButton>
+            </div>
+        }
+        else if (_paymentState == PaymentState.Failed)
+        {
+            <!-- ПОМИЛКА -->
+            <MudPaper Style="background:#1A1A1A; border-radius:20px; padding:32px; text-align:center;">
+                <div style="width:72px; height:72px; border-radius:50%; background:#FF6584;
+                            display:flex; align-items:center; justify-content:center; margin:0 auto 20px;">
+                    <MudIcon Icon="@Icons.Material.Filled.Close" Style="color:white; font-size:40px;" />
+                </div>
+                <MudText Typo="Typo.h6" Style="color:white; margin-bottom:8px;">Помилка оплати</MudText>
+                <MudText Style="color:rgba(255,255,255,0.5); margin-bottom:24px;">@_errorMessage</MudText>
+                <MudButton Variant="Variant.Filled" FullWidth="true"
+                           Style="background:#2A2A2A; color:white; border-radius:14px; padding:14px;"
+                           OnClick="ResetPayment">
+                    Спробувати ще раз
+                </MudButton>
+            </MudPaper>
+        }
+        else
+        {
+            <!-- КАРТКА ОПЛАТИ -->
+            <!-- Monobank Header -->
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:28px; padding:0 4px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:36px; height:36px; border-radius:10px;
+                                background:linear-gradient(135deg,#1A1A1A,#333);
+                                border:1px solid #333; display:flex; align-items:center; justify-content:center;">
+                        <span style="color:white; font-weight:900; font-size:14px;">м</span>
+                    </div>
+                    <div>
+                        <div style="color:white; font-weight:700; font-size:0.9rem;">Monobank</div>
+                        <div style="color:rgba(255,255,255,0.35); font-size:0.72rem;">Безпечна оплата</div>
+                    </div>
+                </div>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Style="color:rgba(255,255,255,0.4);"
+                               OnClick='() => Nav.NavigateTo("/")' />
+            </div>
+
+            <!-- Merchant Info -->
+            <MudPaper Style="background:#141414; border:1px solid #222; border-radius:18px; padding:20px 20px 16px; margin-bottom:16px;">
+                <div style="display:flex; align-items:center; gap:14px; margin-bottom:16px;">
+                    <div style="width:48px; height:48px; border-radius:14px;
+                                background:linear-gradient(135deg,#6C63FF,#4FACFE);
+                                display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <MudIcon Icon="@Icons.Material.Filled.FitnessCenter" Style="color:white;" />
+                    </div>
+                    <div>
+                        <div style="color:white; font-weight:700;">SportClub</div>
+                        <div style="color:rgba(255,255,255,0.4); font-size:0.8rem;">sportclub.ua</div>
+                    </div>
+                </div>
+                <div style="border-top:1px solid #222; padding-top:14px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="color:rgba(255,255,255,0.5); font-size:0.85rem;">Призначення</span>
+                        <span style="color:white; font-size:0.85rem; font-weight:600; text-align:right; max-width:200px;">
+                            @($"Оплата абонемента «{_plan.Name}»")
+                        </span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="color:rgba(255,255,255,0.5); font-size:0.85rem;">Сума</span>
+                        <span style="color:white; font-size:1.4rem; font-weight:800;">@_plan.Price.ToString("N0") ₴</span>
+                    </div>
+                </div>
+            </MudPaper>
+
+            @if (_paymentState == PaymentState.Idle)
+            {
+                <!-- Кнопка ОПЛАТИТИ -->
+                <MudButton Variant="Variant.Filled" FullWidth="true"
+                           Style="background:#1A1A1A; border:1px solid #333; color:white;
+                                  border-radius:16px; padding:18px; font-weight:700; font-size:1rem;
+                                  text-transform:none; margin-bottom:12px;"
+                           StartIcon="@Icons.Material.Filled.CreditCard"
+                           Disabled="_isProcessing"
+                           OnClick="InitiatePayment">
+                    @if (_isProcessing)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Style="color:white; margin-right:8px;" />
+                        <span>Ініціалізація...</span>
+                    }
+                    else
+                    {
+                        <span>Оплатити через Monobank</span>
+                    }
+                </MudButton>
+
+                <MudText Align="Align.Center" Style="color:rgba(255,255,255,0.25); font-size:0.75rem;">
+                    <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Style="vertical-align:middle; margin-right:2px;" />
+                    Захищено 256-bit SSL шифруванням
+                </MudText>
+            }
+            else if (_paymentState == PaymentState.WaitingForApprove)
+            {
+                <!-- Очікування підтвердження -->
+                <MudPaper Style="background:#141414; border:1px solid #222; border-radius:18px; padding:28px 20px; text-align:center; margin-bottom:12px;">
+                    <!-- QR-код (фейковий на основі SVG) -->
+                    <div style="background:white; border-radius:12px; padding:16px; display:inline-block; margin-bottom:20px;
+                                box-shadow:0 0 30px rgba(108,99,255,0.2);">
+                        <svg width="140" height="140" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
+                            <!-- QR-код паттерн (статичний, імітація) -->
+                            <rect width="140" height="140" fill="white"/>
+                            <!-- Кут лівий верх -->
+                            <rect x="10" y="10" width="36" height="36" rx="4" fill="black"/>
+                            <rect x="16" y="16" width="24" height="24" rx="2" fill="white"/>
+                            <rect x="20" y="20" width="16" height="16" rx="1" fill="black"/>
+                            <!-- Кут правий верх -->
+                            <rect x="94" y="10" width="36" height="36" rx="4" fill="black"/>
+                            <rect x="100" y="16" width="24" height="24" rx="2" fill="white"/>
+                            <rect x="104" y="20" width="16" height="16" rx="1" fill="black"/>
+                            <!-- Кут лівий низ -->
+                            <rect x="10" y="94" width="36" height="36" rx="4" fill="black"/>
+                            <rect x="16" y="100" width="24" height="24" rx="2" fill="white"/>
+                            <rect x="20" y="104" width="16" height="16" rx="1" fill="black"/>
+                            <!-- Дані (імітація пікселів QR) -->
+                            <rect x="56" y="10" width="8" height="8" fill="black"/>
+                            <rect x="68" y="10" width="8" height="8" fill="black"/>
+                            <rect x="80" y="10" width="8" height="8" fill="black"/>
+                            <rect x="56" y="22" width="8" height="8" fill="black"/>
+                            <rect x="80" y="22" width="8" height="8" fill="black"/>
+                            <rect x="56" y="34" width="24" height="8" fill="black"/>
+                            <rect x="10" y="56" width="8" height="8" fill="black"/>
+                            <rect x="22" y="56" width="8" height="8" fill="black"/>
+                            <rect x="34" y="56" width="8" height="8" fill="black"/>
+                            <rect x="10" y="68" width="8" height="8" fill="black"/>
+                            <rect x="34" y="68" width="8" height="8" fill="black"/>
+                            <rect x="10" y="80" width="24" height="8" fill="black"/>
+                            <rect x="56" y="56" width="8" height="8" fill="black"/>
+                            <rect x="70" y="56" width="8" height="8" fill="black"/>
+                            <rect x="84" y="56" width="8" height="8" fill="black"/>
+                            <rect x="98" y="56" width="8" height="8" fill="black"/>
+                            <rect x="112" y="56" width="8" height="8" fill="black"/>
+                            <rect x="126" y="56" width="8" height="8" fill="black"/>
+                            <rect x="56" y="70" width="28" height="8" fill="black"/>
+                            <rect x="98" y="70" width="8" height="8" fill="black"/>
+                            <rect x="112" y="70" width="22" height="8" fill="black"/>
+                            <rect x="56" y="84" width="8" height="8" fill="black"/>
+                            <rect x="84" y="84" width="8" height="8" fill="black"/>
+                            <rect x="98" y="84" width="8" height="8" fill="black"/>
+                            <rect x="112" y="84" width="22" height="8" fill="black"/>
+                            <rect x="56" y="98" width="8" height="8" fill="black"/>
+                            <rect x="70" y="98" width="8" height="8" fill="black"/>
+                            <rect x="84" y="98" width="8" height="8" fill="black"/>
+                            <rect x="98" y="98" width="36" height="8" fill="black"/>
+                            <rect x="56" y="112" width="36" height="8" fill="black"/>
+                            <rect x="98" y="112" width="8" height="8" fill="black"/>
+                            <rect x="126" y="112" width="8" height="8" fill="black"/>
+                            <rect x="56" y="126" width="8" height="8" fill="black"/>
+                            <rect x="70" y="126" width="22" height="8" fill="black"/>
+                            <rect x="112" y="126" width="22" height="8" fill="black"/>
+                        </svg>
+                    </div>
+
+                    <!-- Пульсуючий індикатор -->
+                    <div style="display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:12px;">
+                        <MudProgressCircular Indeterminate="true" Size="Size.Small" Color="Color.Warning"
+                                             Style="width:18px; height:18px;" />
+                        <MudText Style="color:white; font-weight:600; font-size:0.95rem;">
+                            Підтвердіть платіж у додатку Monobank
+                        </MudText>
+                    </div>
+
+                    <MudText Style="color:rgba(255,255,255,0.35); font-size:0.78rem; margin-bottom:16px;">
+                        Відскануйте QR або відкрийте Push-сповіщення
+                    </MudText>
+
+                    <!-- Прогрес-бар очікування -->
+                    <MudProgressLinear Color="Color.Warning" Value="@_waitProgress" Rounded="true" Class="mb-16" />
+
+                    <MudText Style="color:rgba(255,255,255,0.25); font-size:0.72rem;">
+                        Очікування підтвердження... @_pollCount / 3
+                    </MudText>
+                </MudPaper>
+
+                <MudButton Variant="Variant.Text" FullWidth="true"
+                           Style="color:rgba(255,255,255,0.3); font-size:0.8rem;"
+                           OnClick="CancelPayment">
+                    Скасувати
+                </MudButton>
+            }
+
+            <!-- Mono Badges -->
+            <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-top:20px; opacity:0.35;">
+                <MudIcon Icon="@Icons.Material.Filled.Shield" Style="color:white; font-size:18px;" />
+                <MudText Style="color:white; font-size:0.72rem;">PCI DSS Level 1</MudText>
+                <MudText Style="color:white; font-size:0.72rem;">·</MudText>
+                <MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Style="color:white; font-size:18px;" />
+                <MudText Style="color:white; font-size:0.72rem;">3D Secure 2.0</MudText>
+            </div>
+        }
+    </div>
+</div>
+
+<style>
+    @@keyframes fadeIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+</style>
+
+@code {
+    [Parameter] public int PlanId { get; set; }
+
+    private enum PaymentState { Idle, WaitingForApprove, Success, Failed }
+
+    private PlanDto? _plan;
+    private int _clientProfileId;
+    private bool _isInitializing = true;
+    private bool _isProcessing = false;
+    private PaymentState _paymentState = PaymentState.Idle;
+    private string _paymentId = string.Empty;
+    private string _errorMessage = string.Empty;
+
+    // Опитування статусу
+    private System.Threading.Timer? _pollTimer;
+    private int _pollCount = 0;
+    private double _waitProgress = 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthState.GetAuthenticationStateAsync();
+        var userIdStr = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (!int.TryParse(userIdStr, out int userId))
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        // Завантажуємо профіль та тариф паралельно
+        var profileTask = ClientProfileService.GetByUserIdAsync(userId);
+        var planTask = PlanService.GetByIdAsync(PlanId);
+
+        await Task.WhenAll(profileTask, planTask);
+
+        var profileResult = await profileTask;
+        var planResult = await planTask;
+
+        if (!profileResult.IsSuccess)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        _clientProfileId = profileResult.Value!.Id;
+
+        if (!planResult.IsSuccess || planResult.Value!.IsArchived)
+        {
+            _plan = null;
+        }
+        else
+        {
+            _plan = planResult.Value;
+        }
+
+        _isInitializing = false;
+    }
+
+    private async Task InitiatePayment()
+    {
+        if (_plan == null) return;
+        _isProcessing = true;
+
+        var result = await PaymentService.InitiatePaymentAsync(
+            _plan.Price,
+            $"Оплата абонемента «{_plan.Name}»");
+
+        _paymentId = result.PaymentId;
+        _pollCount = 0;
+        _waitProgress = 0;
+        _paymentState = PaymentState.WaitingForApprove;
+        _isProcessing = false;
+
+        // Запускаємо таймер опитування кожні 2 секунди
+        _pollTimer = new System.Threading.Timer(
+            async _ => await PollPaymentStatus(),
+            null,
+            TimeSpan.FromSeconds(2),
+            TimeSpan.FromSeconds(2));
+    }
+
+    private async Task PollPaymentStatus()
+    {
+        try
+        {
+            var status = await PaymentService.CheckPaymentStatusAsync(_paymentId);
+            _pollCount++;
+            _waitProgress = (_pollCount / 3.0) * 100;
+
+            if (status == MonoPaymentStatus.Success)
+            {
+                StopPolling();
+                await ConfirmPurchase();
+            }
+            else if (status == MonoPaymentStatus.Failed)
+            {
+                StopPolling();
+                _errorMessage = "Платіж відхилено банком.";
+                _paymentState = PaymentState.Failed;
+                await InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch
+        {
+            StopPolling();
+        }
+    }
+
+    private async Task ConfirmPurchase()
+    {
+        var dto = new BuyOnlineDto(_clientProfileId, PlanId, _paymentId);
+        var result = await SubscriptionService.BuySubscriptionOnlineAsync(dto);
+
+        if (result.IsSuccess)
+        {
+            _paymentState = PaymentState.Success;
+        }
+        else
+        {
+            _errorMessage = result.FirstError;
+            _paymentState = PaymentState.Failed;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CancelPayment()
+    {
+        StopPolling();
+        _paymentState = PaymentState.Idle;
+        _paymentId = string.Empty;
+        _pollCount = 0;
+        _waitProgress = 0;
+    }
+
+    private void ResetPayment()
+    {
+        _paymentState = PaymentState.Idle;
+        _paymentId = string.Empty;
+        _errorMessage = string.Empty;
+        _pollCount = 0;
+        _waitProgress = 0;
+    }
+
+    private void GoToDashboard() => Nav.NavigateTo("/client", forceLoad: false);
+
+    private void StopPolling()
+    {
+        _pollTimer?.Dispose();
+        _pollTimer = null;
+    }
+
+    public void Dispose() => StopPolling();
+}

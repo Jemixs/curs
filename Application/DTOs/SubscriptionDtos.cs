@@ -4,7 +4,14 @@ namespace SportClub.Application.DTOs;
 
 public sealed record SellSubscriptionDto(
     int ClientProfileId,
-    int PlanId);
+    int PlanId,
+    string? PromoCode = null,
+    bool UseBonuses = false);
+
+public sealed record BuyOnlineDto(
+    int ClientProfileId,
+    int PlanId,
+    string TransactionId);
 
 public sealed record SubscriptionDto(
     int Id,
@@ -17,7 +24,9 @@ public sealed record SubscriptionDto(
     int FrozenDaysUsed,
     DateTime? FrozenSince,
     int VisitsUsed,
-    bool IsActive);
+    bool IsActive,
+    decimal FinalPrice,
+    string? TransactionId = null);
 
 public sealed record CheckInResultDto(
     CheckInResult Status,

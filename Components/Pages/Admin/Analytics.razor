@@ -1,0 +1,130 @@
+@page "/admin/analytics"
+@layout SportClub.Components.Layout.AdminLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using SportClub.Application.DTOs
+@using SportClub.Application.Interfaces
+@attribute [Authorize(Roles = "Admin")]
+
+@inject IAnalyticsService AnalyticsService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+
+<MudText Typo="Typo.h4" Class="mb-6" Style="font-weight:700; color:#1E1B4B;">Фінансова Аналітика</MudText>
+
+<MudCard Elevation="2" Class="mb-6 pa-4">
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            <MudDatePicker @bind-Date="_fromDate" Label="Початкова дата" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudDatePicker @bind-Date="_toDate" Label="Кінцева дата" Variant="Variant.Outlined" />
+        </MudItem>
+        <MudItem xs="12" sm="4" Class="d-flex align-center">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Search" OnClick="LoadReport" Class="mr-2">Сформувати</MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Success" StartIcon="@Icons.Material.Filled.Download" OnClick="DownloadExcel" Disabled="@(_report == null)">Експорт Excel</MudButton>
+        </MudItem>
+    </MudGrid>
+</MudCard>
+
+@if (_isLoading)
+{
+    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+}
+else if (_report != null)
+{
+    <MudGrid Class="mb-6">
+        <MudItem xs="12" sm="4">
+            <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg, #6C63FF 0%, #4FACFE 100%); color:white;">
+                <MudText Typo="Typo.subtitle2">Загальний дохід</MudText>
+                <MudText Typo="Typo.h4" Style="font-weight:700;">@_report.TotalRevenue.ToString("C2", new System.Globalization.CultureInfo("uk-UA"))</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg, #1E1B4B 0%, #3B3673 100%); color:white;">
+                <MudText Typo="Typo.subtitle2">Продано абонементів</MudText>
+                <MudText Typo="Typo.h4" Style="font-weight:700;">@_report.TotalSubscriptionsSold шт.</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Elevation="2" Class="pa-4" Style="background:linear-gradient(135deg, #FF6584 0%, #FF94A8 100%); color:white;">
+                <MudText Typo="Typo.subtitle2">Надано знижок/бонусів</MudText>
+                <MudText Typo="Typo.h4" Style="font-weight:700;">@_report.TotalBonusesUsed.ToString("C2", new System.Globalization.CultureInfo("uk-UA"))</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudTable Items="_report.Sales" Hover="true" Elevation="2">
+        <HeaderContent>
+            <MudTh>Дата продажу</MudTh>
+            <MudTh>Клієнт</MudTh>
+            <MudTh>Тариф</MudTh>
+            <MudTh>Початкова ціна</MudTh>
+            <MudTh>Знижка/Бонуси</MudTh>
+            <MudTh>Фактична ціна</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Дата продажу">@context.Date.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudTd>
+            <MudTd DataLabel="Клієнт">
+                <b>@context.ClientFullName</b><br/>
+                <small class="text-muted">@context.ClientBarcode</small>
+            </MudTd>
+            <MudTd DataLabel="Тариф">@context.PlanName</MudTd>
+            <MudTd DataLabel="Початкова ціна">@context.OriginalPrice.ToString("C2", new System.Globalization.CultureInfo("uk-UA"))</MudTd>
+            <MudTd DataLabel="Знижка/Бонуси" Style="color:#FF6584;">-@context.BonusesUsed.ToString("C2", new System.Globalization.CultureInfo("uk-UA"))</MudTd>
+            <MudTd DataLabel="Фактична ціна" Style="font-weight:bold; color:#6C63FF;">@context.FinalPrice.ToString("C2", new System.Globalization.CultureInfo("uk-UA"))</MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager />
+        </PagerContent>
+    </MudTable>
+}
+
+@code {
+    private bool _isLoading = false;
+    private DateTime? _fromDate = DateTime.Today.AddDays(-30);
+    private DateTime? _toDate = DateTime.Today;
+    
+    private FinancialReportDto? _report;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReport();
+    }
+
+    private async Task LoadReport()
+    {
+        if (_fromDate == null || _toDate == null)
+        {
+            Snackbar.Add("Будь ласка, оберіть діапазон дат", Severity.Warning);
+            return;
+        }
+
+        _isLoading = true;
+        
+        // Враховуємо весь день для кінцевої дати
+        var toWithTime = _toDate.Value.Date.AddDays(1).AddTicks(-1);
+
+        var result = await AnalyticsService.GetFinancialReportAsync(_fromDate.Value.ToUniversalTime(), toWithTime.ToUniversalTime());
+        if (result.IsSuccess)
+        {
+            _report = result.Value;
+        }
+        else
+        {
+            Snackbar.Add(result.FirstError, Severity.Error);
+        }
+
+        _isLoading = false;
+    }
+
+    private void DownloadExcel()
+    {
+        if (_fromDate == null || _toDate == null) return;
+        
+        var toWithTime = _toDate.Value.Date.AddDays(1).AddTicks(-1);
+        
+        var url = $"/api/reports/excel?from={Uri.EscapeDataString(_fromDate.Value.ToUniversalTime().ToString("O"))}&to={Uri.EscapeDataString(toWithTime.ToUniversalTime().ToString("O"))}";
+        Nav.NavigateTo(url, forceLoad: true);
+    }
+}

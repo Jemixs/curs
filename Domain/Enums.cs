@@ -1,6 +1,5 @@
 namespace SportClub.Domain;
 
-/// <summary>Role assigned to a user account.</summary>
 public enum UserRole
 {
     Admin = 0,
@@ -8,24 +7,19 @@ public enum UserRole
     Client = 2
 }
 
-/// <summary>Determines how a subscription's session count is tracked.</summary>
 public enum PlanType
 {
-    /// <summary>Unlimited visits within the validity period.</summary>
     Unlimited = 0,
 
-    /// <summary>A fixed number of visits within the validity period.</summary>
     LimitedVisits = 1
 }
 
-/// <summary>Granularity of the plan validity period.</summary>
 public enum PlanDurationUnit
 {
     Days = 0,
     Months = 1
 }
 
-/// <summary>Outcome of a check-in attempt.</summary>
 public enum CheckInResult
 {
     Success = 0,

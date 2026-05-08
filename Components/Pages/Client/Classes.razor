@@ -1,0 +1,228 @@
+@page "/client/classes"
+@layout SportClub.Components.Layout.ClientLayout
+@rendermode Microsoft.AspNetCore.Components.Web.RenderMode.InteractiveServer
+@using Microsoft.AspNetCore.Authorization
+@using SportClub.Application.DTOs
+@using SportClub.Application.Interfaces
+@using System.Security.Claims
+@attribute [Authorize(Roles = "Client")]
+
+@inject IBookingService BookingService
+@inject IClientProfileService ClientProfileService
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudText Typo="Typo.h5" Class="mb-4" Style="font-weight:700; color:#1E1B4B;">Групові заняття</MudText>
+
+@if (_isLoading)
+{
+    <div class="d-flex justify-center mt-8">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    </div>
+}
+else
+{
+    <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" Class="mb-6">
+        <MudTabPanel Text="Доступні заняття">
+            @if (!_upcomingSessions.Any())
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">На найближчий час занять не заплановано.</MudAlert>
+            }
+            else
+            {
+                <div class="mt-4">
+                    @foreach (var group in _upcomingSessions.GroupBy(s => s.StartTime.ToLocalTime().Date))
+                    {
+                        <MudText Typo="Typo.subtitle1" Style="font-weight:bold; color:#6C63FF;" Class="mt-4 mb-2">@group.Key.ToString("dd MMMM, dddd")</MudText>
+                        
+                        @foreach (var session in group.OrderBy(s => s.StartTime))
+                        {
+                            var pct = GetCapacityPercentage(session);
+                            var isFull = session.CurrentParticipants >= session.MaxParticipants;
+                            var canBook = !session.IsUserBooked && !isFull && session.StartTime > DateTime.UtcNow;
+
+                            <MudCard Elevation="2" Class="mb-4" Style="border-radius:12px;">
+                                <MudCardContent>
+                                    <div class="d-flex justify-space-between align-start">
+                                        <div>
+                                            <MudText Typo="Typo.h6" Style="font-weight:600;">@session.Title</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Default" Style="opacity: 0.7;">
+                                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Style="vertical-align:middle; margin-right:4px;" />
+                                                @session.StartTime.ToLocalTime().ToString("HH:mm") - @session.EndTime.ToLocalTime().ToString("HH:mm")
+                                            </MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Default" Class="mt-1" Style="opacity: 0.7;">
+                                                <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Style="vertical-align:middle; margin-right:4px;" />
+                                                Тренер: @session.Trainer.FullName
+                                            </MudText>
+                                        </div>
+                                        <div class="text-right">
+                                            @if (session.IsUserBooked)
+                                            {
+                                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Class="mt-1">Ви записані</MudChip>
+                                            }
+                                            else if (isFull)
+                                            {
+                                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Class="mt-1">Немає місць</MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip T="string" Color="Color.Primary" Size="Size.Small" Variant="Variant.Outlined" Class="mt-1">
+                                                    Вільних місць: @(session.MaxParticipants - session.CurrentParticipants)
+                                                </MudChip>
+                                            }
+                                        </div>
+                                    </div>
+                                    <MudProgressLinear Color="@GetCapacityColor(session)" Value="@pct" Class="mt-3 mb-1" />
+                                </MudCardContent>
+                                <MudCardActions Class="pt-0 pb-3 px-4 d-flex justify-end">
+                                    @if (session.IsUserBooked)
+                                    {
+                                        <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="@(() => CancelBookingFromSession(session))">Скасувати запис</MudButton>
+                                    }
+                                    else if (canBook)
+                                    {
+                                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Style="border-radius:20px;" OnClick="@(() => BookSession(session))">Записатися</MudButton>
+                                    }
+                                </MudCardActions>
+                            </MudCard>
+                        }
+                    }
+                </div>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Мої записи">
+            @if (!_myBookings.Any())
+            {
+                <MudAlert Severity="Severity.Info" Class="mt-4">У вас немає активних або минулих записів.</MudAlert>
+            }
+            else
+            {
+                <div class="mt-4">
+                    @foreach (var booking in _myBookings)
+                    {
+                        bool isActive = booking.Status == "Active";
+                        bool isPast = booking.SessionStart < DateTime.UtcNow;
+
+                        <MudCard Elevation="1" Class="mb-3" Style="@(isPast ? "opacity:0.7;" : "")">
+                            <MudCardContent Class="py-3">
+                                <div class="d-flex justify-space-between align-center">
+                                    <div>
+                                        <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@booking.SessionTitle</MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Default" Style="opacity: 0.7;">@booking.SessionStart.ToLocalTime().ToString("dd.MM.yyyy HH:mm")</MudText>
+                                    </div>
+                                    <div class="text-right">
+                                        @if (!isActive)
+                                        {
+                                            <MudChip T="string" Color="Color.Error" Size="Size.Small">Скасовано</MudChip>
+                                        }
+                                        else if (isPast)
+                                        {
+                                            <MudChip T="string" Color="Color.Default" Size="Size.Small">Завершено</MudChip>
+                                        }
+                                        else
+                                        {
+                                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Активно</MudChip>
+                                            <div class="mt-1">
+                                                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" OnClick="@(() => CancelBooking(booking.Id))" />
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </MudCardContent>
+                        </MudCard>
+                    }
+                </div>
+            }
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    private bool _isLoading = true;
+    private int _clientProfileId;
+    private IReadOnlyList<ClassSessionDto> _upcomingSessions = Array.Empty<ClassSessionDto>();
+    private IReadOnlyList<ClassBookingDto> _myBookings = Array.Empty<ClassBookingDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var userIdStr = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (int.TryParse(userIdStr, out int userId))
+            {
+                var profileResult = await ClientProfileService.GetByUserIdAsync(userId);
+                if (profileResult.IsSuccess)
+                {
+                    _clientProfileId = profileResult.Value!.Id;
+                    await LoadData();
+                }
+            }
+        }
+    }
+
+    private async Task LoadData()
+    {
+        _isLoading = true;
+        
+        var sessionsResult = await BookingService.GetUpcomingSessionsAsync(_clientProfileId);
+        if (sessionsResult.IsSuccess)
+            _upcomingSessions = sessionsResult.Value!;
+
+        var bookingsResult = await BookingService.GetClientBookingsAsync(_clientProfileId);
+        if (bookingsResult.IsSuccess)
+            _myBookings = bookingsResult.Value!;
+
+        _isLoading = false;
+    }
+
+    private int GetCapacityPercentage(ClassSessionDto s) => s.MaxParticipants == 0 ? 0 : (s.CurrentParticipants * 100) / s.MaxParticipants;
+    private Color GetCapacityColor(ClassSessionDto s)
+    {
+        var pct = GetCapacityPercentage(s);
+        if (pct >= 100) return Color.Error;
+        if (pct >= 80) return Color.Warning;
+        return Color.Success;
+    }
+
+    private async Task BookSession(ClassSessionDto session)
+    {
+        var res = await BookingService.BookAsync(session.Id, _clientProfileId);
+        if (res.IsSuccess)
+        {
+            Snackbar.Add($"Ви успішно записані на {session.Title}", Severity.Success);
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(res.FirstError, Severity.Error);
+        }
+    }
+
+    private async Task CancelBookingFromSession(ClassSessionDto session)
+    {
+        // Find the active booking for this session
+        var booking = _myBookings.FirstOrDefault(b => b.SessionId == session.Id && b.Status == "Active");
+        if (booking != null)
+        {
+            await CancelBooking(booking.Id);
+        }
+    }
+
+    private async Task CancelBooking(int bookingId)
+    {
+        var res = await BookingService.CancelBookingAsync(bookingId, _clientProfileId);
+        if (res.IsSuccess)
+        {
+            Snackbar.Add("Запис скасовано", Severity.Info);
+            await LoadData();
+        }
+        else
+        {
+            Snackbar.Add(res.FirstError, Severity.Error);
+        }
+    }
+}

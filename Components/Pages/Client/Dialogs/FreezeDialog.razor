@@ -1,0 +1,42 @@
+@using SportClub.Application.Interfaces
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.AcUnit" Class="mr-2" />
+            Заморозка абонемента
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            Виберіть термін, на який ви хочете призупинити дію абонемента. 
+            Під час заморозки ви не зможете відвідувати клуб.
+        </MudText>
+
+        <MudRadioGroup @bind-Value="_daysToFreeze">
+            <MudRadio Value="7" Color="Color.Primary">7 днів</MudRadio>
+            <MudRadio Value="14" Color="Color.Primary">14 днів</MudRadio>
+            <MudRadio Value="30" Color="Color.Primary">30 днів</MudRadio>
+        </MudRadioGroup>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Color="Color.Default">Скасувати</MudButton>
+        <MudButton OnClick="Submit" Color="Color.Info" Variant="Variant.Filled" StartIcon="@Icons.Material.Filled.AcUnit">Заморозити</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] MudDialogInstance MudDialog { get; set; } = null!;
+
+    private int _daysToFreeze = 7;
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Submit()
+    {
+        MudDialog.Close(DialogResult.Ok(_daysToFreeze));
+    }
+}
